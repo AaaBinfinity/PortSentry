@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <!-- 系统状态卡片 -->
+    <div class="col-md-3">
+        <div class="card text-white bg-primary mb-3">
+            <div class="card-body">
+                <h5 class="card-title">监听端口</h5>
+                <h2 class="card-text" id="listening-ports">0</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success mb-3">
+            <div class="card-body">
+                <h5 class="card-title">正常端口</h5>
+                <h2 class="card-text" id="normal-ports">0</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning mb-3">
+            <div class="card-body">
+                <h5 class="card-title">告警数量</h5>
+                <h2 class="card-text" id="alert-count">0</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-info mb-3">
+            <div class="card-body">
+                <h5 class="card-title">系统负载</h5>
+                <h2 class="card-text" id="system-load">0.0</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 端口状态图表 -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5>端口状态监控</h5>
+            </div>
+            <div class="card-body">
+                <div id="port-chart" style="height: 400px;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 实时告警 -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>实时告警</h5>
+            </div>
+            <div class="card-body">
+                <div id="alerts-list" style="max-height: 400px; overflow-y: auto;">
+                    <!-- 告警内容通过JS动态加载 -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <!-- 端口列表 -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>端口详情列表</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>端口</th>
+                            <th>协议</th>
+                            <th>状态</th>
+                            <th>进程名</th>
+                            <th>PID</th>
+                            <th>用户</th>
+                            <th>启动时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="port-table">
+                        <!-- 端口数据通过JS动态加载 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 初始化ECharts图表
+    const portChart = echarts.init(document.getElementById('port-chart'));
+    
+    // 更新仪表板数据
+    function updateDashboard() {
+        fetch('/api/port-status')
+            .then(response => response.json())
+            .then(data => {
+                // 更新端口数量
+                document.getElementById('listening-ports').textContent = 
+                    data.current_ports ? data.current_ports.length : 0;
+                
+                // 更新端口表格
+                updatePortTable(data.current_ports);
+                
+                // 更新图表
+                updatePortChart(data.current_ports);
+            });
+        
+        fetch('/api/alerts?resolved=false')
+            .then(response => response.json())
+            .then(alerts => {
+                document.getElementById('alert-count').textContent = alerts.length;
+                updateAlertsList(alerts);
+            });
+        
+        fetch('/api/system-info')
+            .then(response => response.json())
+            .then(info => {
+                document.getElementById('system-load').textContent = 
+                    info.load['1min'].toFixed(2);
+            });
+    }
+    
+    function updatePortTable(ports) {
+        const tbody = document.getElementById('port-table');
+        tbody.innerHTML = '';
+        
+        if (ports) {
+            ports.forEach(port => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${port.port}</td>
+                    <td>${port.protocol}</td>
+                    <td><span class="badge bg-success">${port.state}</span></td>
+                    <td>${port.process_name}</td>
+                    <td>${port.pid}</td>
+                    <td>${port.user}</td>
+                    <td>${port.start_time || ''}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+    }
+    
+    function updatePortChart(ports) {
+        if (!ports) return;
+        
+        // 按进程分组统计
+        const processCount = {};
+        ports.forEach(port => {
+            const name = port.process_name || 'unknown';
+            processCount[name] = (processCount[name] || 0) + 1;
+        });
+        
+        const option = {
+            tooltip: {
+                trigger: 'item'
+            },
+            legend: {
+                orient: 'vertical',
+                left: 'left'
+            },
+            series: [{
+                name: '端口分布',
+                type: 'pie',
+                radius: '50%',
+                data: Object.entries(processCount).map(([name, value]) => ({
+                    name: name,
+                    value: value
+                })),
+                emphasis: {
+                    itemStyle: {
+                        shadowBlur: 10,
+                        shadowOffsetX: 0,
+                        shadowColor: 'rgba(0, 0, 0, 0.5)'
+                    }
+                }
+            }]
+        };
+        
+        portChart.setOption(option);
+    }
+    
+    function updateAlertsList(alerts) {
+        const container = document.getElementById('alerts-list');
+        container.innerHTML = '';
+        
+        alerts.slice(0, 5).forEach(alert => {
+            const alertElement = document.createElement('div');
+            alertElement.className = `alert alert-${getAlertClass(alert.level)} mb-2`;
+            alertElement.innerHTML = `
+                <h6>${alert.title}</h6>
+                <small>${alert.message}</small>
+                <br><small class="text-muted">${alert.timestamp}</small>
+            `;
+            container.appendChild(alertElement);
+        });
+    }
+    
+    function getAlertClass(level) {
+        switch(level.toLowerCase()) {
+            case 'error': return 'danger';
+            case 'warning': return 'warning';
+            default: return 'info';
+        }
+    }
+    
+    // 每3秒更新一次数据
+    setInterval(updateDashboard, 3000);
+    updateDashboard(); // 初始加载
+</script>
+{% endblock %}

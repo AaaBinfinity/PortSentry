@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>告警中心</h2>
+    <div>
+        <button class="btn btn-outline-success" onclick="resolveAllAlerts()">标记全部为已解决</button>
+        <button class="btn btn-outline-primary" onclick="refreshAlerts()">刷新</button>
+    </div>
+</div>
+
+<!-- 告警统计 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-warning">
+            <div class="card-body">
+                <h5 class="card-title">未解决告警</h5>
+                <h2 class="card-text" id="unresolved-count">0</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-danger">
+            <div class="card-body">
+                <h5 class="card-title">严重告警</h5>
+                <h2 class="card-text" id="error-count">0</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-info">
+            <div class="card-body">
+                <h5 class="card-title">警告数量</h5>
+                <h2 class="card-text" id="warning-count">0</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <h5 class="card-title">已解决告警</h5>
+                <h2 class="card-text" id="resolved-count">0</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 告警筛选 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3">
+                <label class="form-label">告警级别</label>
+                <select class="form-select" id="level-filter" onchange="filterAlerts()">
+                    <option value="all">全部级别</option>
+                    <option value="ERROR">严重</option>
+                    <option value="WARNING">警告</option>
+                    <option value="INFO">信息</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">解决状态</label>
+                <select class="form-select" id="resolved-filter" onchange="filterAlerts()">
+                    <option value="all">全部状态</option>
+                    <option value="unresolved">未解决</option>
+                    <option value="resolved">已解决</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">时间范围</label>
+                <select class="form-select" id="time-filter" onchange="filterAlerts()">
+                    <option value="24">最近24小时</option>
+                    <option value="168">最近7天</option>
+                    <option value="720">最近30天</option>
+                    <option value="all">全部时间</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">端口号</label>
+                <input type="number" class="form-control" id="port-filter" placeholder="输入端口号" onchange="filterAlerts()">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 告警列表 -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">告警列表</h5>
+    </div>
+    <div class="card-body">
+        <div id="alerts-container">
+            <!-- 告警内容通过JS动态加载 -->
+        </div>
+        
+        <!-- 分页控件 -->
+        <nav>
+            <ul class="pagination justify-content-center" id="pagination">
+                <!-- 分页通过JS动态生成 -->
+            </ul>
+        </nav>
+    </div>
+</div>
+
+<script>
+    let allAlerts = [];
+    let currentPage = 1;
+    const alertsPerPage = 10;
+
+    // 加载告警数据
+    function loadAlerts() {
+        fetch('/api/alerts?resolved=all')
+            .then(response => response.json())
+            .then(alerts => {
+                allAlerts = alerts;
+                updateAlertStats(alerts);
+                filterAlerts();
+            })
+            .catch(error => {
+                console.error('加载告警失败:', error);
+            });
+    }
+
+    // 更新告警统计
+    function updateAlertStats(alerts) {
+        const unresolved = alerts.filter(a => !a.resolved);
+        const errors = unresolved.filter(a => a.level === 'ERROR');
+        const warnings = unresolved.filter(a => a.level === 'WARNING');
+        const resolved = alerts.filter(a => a.resolved);
+
+        document.getElementById('unresolved-count').textContent = unresolved.length;
+        document.getElementById('error-count').textContent = errors.length;
+        document.getElementById('warning-count').textContent = warnings.length;
+        document.getElementById('resolved-count').textContent = resolved.length;
+    }
+
+    // 筛选告警
+    function filterAlerts() {
+        const levelFilter = document.getElementById('level-filter').value;
+        const resolvedFilter = document.getElementById('resolved-filter').value;
+        const timeFilter = document.getElementById('time-filter').value;
+        const portFilter = document.getElementById('port-filter').value;
+
+        let filteredAlerts = allAlerts;
+
+        // 级别筛选
+        if (levelFilter !== 'all') {
+            filteredAlerts = filteredAlerts.filter(alert => alert.level === levelFilter);
+        }
+
+        // 解决状态筛选
+        if (resolvedFilter === 'unresolved') {
+            filteredAlerts = filteredAlerts.filter(alert => !alert.resolved);
+        } else if (resolvedFilter === 'resolved') {
+            filteredAlerts = filteredAlerts.filter(alert => alert.resolved);
+        }
+
+        // 时间筛选
+        if (timeFilter !== 'all') {
+            const hours = parseInt(timeFilter);
+            const cutoffTime = new Date();
+            cutoffTime.setHours(cutoffTime.getHours() - hours);
+            
+            filteredAlerts = filteredAlerts.filter(alert => {
+                const alertTime = new Date(alert.timestamp);
+                return alertTime >= cutoffTime;
+            });
+        }
+
+        // 端口筛选
+        if (portFilter) {
+            filteredAlerts = filteredAlerts.filter(alert => 
+                alert.port && alert.port.toString() === portFilter
+            );
+        }
+
+        // 按时间倒序排序
+        filteredAlerts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        displayAlerts(filteredAlerts);
+    }
+
+    // 显示告警列表
+    function displayAlerts(alerts) {
+        const container = document.getElementById('alerts-container');
+        const pagination = document.getElementById('pagination');
+        
+        // 分页计算
+        const totalPages = Math.ceil(alerts.length / alertsPerPage);
+        const startIndex = (currentPage - 1) * alertsPerPage;
+        const endIndex = startIndex + alertsPerPage;
+        const pageAlerts = alerts.slice(startIndex, endIndex);
+
+        // 显示告警
+        if (pageAlerts.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-4">
+                    <h5>暂无告警数据</h5>
+                    <p class="text-muted">当前筛选条件下没有找到匹配的告警</p>
+                </div>
+            `;
+        } else {
+            container.innerHTML = pageAlerts.map(alert => `
+                <div class="alert alert-${getAlertClass(alert.level)} d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">${alert.title}</h6>
+                            <span class="badge bg-${getAlertClass(alert.level)}">${alert.level}</span>
+                        </div>
+                        <p class="mb-1">${alert.message}</p>
+                        <small class="text-muted">
+                            ${alert.port ? `端口: ${alert.port} • ` : ''}
+                            时间: ${alert.timestamp}
+                        </small>
+                    </div>
+                    <div class="ms-3">
+                        ${!alert.resolved ? `
+                            <button class="btn btn-sm btn-outline-success" onclick="resolveAlert(${alert.id})">
+                                标记解决
+                            </button>
+                        ` : `
+                            <span class="badge bg-success">已解决</span>
+                        `}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 更新分页控件
+        updatePagination(totalPages);
+    }
+
+    // 更新分页控件
+    function updatePagination(totalPages) {
+        const pagination = document.getElementById('pagination');
+        
+        if (totalPages <= 1) {
+            pagination.innerHTML = '';
+            return;
+        }
+
+        let paginationHTML = '';
+        
+        // 上一页
+        if (currentPage > 1) {
+            paginationHTML += `
+                <li class="page-item">
+                    <a class="page-link" href="#" onclick="changePage(${currentPage - 1})">上一页</a>
+                </li>
+            `;
+        }
+
+        // 页码
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === currentPage) {
+                paginationHTML += `
+                    <li class="page-item active">
+                        <a class="page-link" href="#">${i}</a>
+                    </li>
+                `;
+            } else {
+                paginationHTML += `
+                    <li class="page-item">
+                        <a class="page-link" href="#" onclick="changePage(${i})">${i}</a>
+                    </li>
+                `;
+            }
+        }
+
+        // 下一页
+        if (currentPage < totalPages) {
+            paginationHTML += `
+                <li class="page-item">
+                    <a class="page-link" href="#" onclick="changePage(${currentPage + 1})">下一页</a>
+                </li>
+            `;
+        }
+
+        pagination.innerHTML = paginationHTML;
+    }
+
+    // 切换页面
+    function changePage(page) {
+        currentPage = page;
+        filterAlerts();
+    }
+
+    // 解决单个告警
+    function resolveAlert(alertId) {
+        fetch(`/api/resolve-alert/${alertId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('告警已标记为解决', 'success');
+                loadAlerts(); // 重新加载数据
+            } else {
+                showToast('操作失败', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('解决告警失败:', error);
+            showToast('操作失败', 'error');
+        });
+    }
+
+    // 解决所有告警
+    function resolveAllAlerts() {
+        if (!confirm('确定要标记所有告警为已解决吗？')) {
+            return;
+        }
+
+        const unresolvedAlerts = allAlerts.filter(alert => !alert.resolved);
+        let resolvedCount = 0;
+
+        // 逐个解决告警
+        unresolvedAlerts.forEach(alert => {
+            fetch(`/api/resolve-alert/${alert.id}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    resolvedCount++;
+                }
+            })
+            .finally(() => {
+                // 最后一个请求完成后刷新
+                if (resolvedCount === unresolvedAlerts.length) {
+                    showToast(`已解决 ${resolvedCount} 个告警`, 'success');
+                    loadAlerts();
+                }
+            });
+        });
+
+        if (unresolvedAlerts.length === 0) {
+            showToast('没有未解决的告警', 'info');
+        }
+    }
+
+    // 刷新告警
+    function refreshAlerts() {
+        loadAlerts();
+        showToast('告警数据已刷新', 'info');
+    }
+
+    // 显示提示消息
+    function showToast(message, type) {
+        // 简单的提示实现
+        alert(`[${type.toUpperCase()}] ${message}`);
+    }
+
+    // 获取告警样式类
+    function getAlertClass(level) {
+        switch(level) {
+            case 'ERROR': return 'danger';
+            case 'WARNING': return 'warning';
+            case 'INFO': return 'info';
+            default: return 'secondary';
+        }
+    }
+
+    // 页面加载时初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        loadAlerts();
+        
+        // 每30秒自动刷新
+        setInterval(loadAlerts, 30000);
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,526 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>详情分析</h2>
+    <div>
+        <button class="btn btn-outline-primary" onclick="refreshData()">刷新数据</button>
+        <button class="btn btn-outline-success" onclick="exportData()">导出报告</button>
+    </div>
+</div>
+
+<!-- 系统概览 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">系统概览</h5>
+            </div>
+            <div class="card-body">
+                <div class="row" id="system-overview">
+                    <!-- 系统信息通过JS动态加载 -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 端口分析图表 -->
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">端口分布分析</h5>
+            </div>
+            <div class="card-body">
+                <div id="port-analysis-chart" style="height: 400px;"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">端口变化趋势</h5>
+            </div>
+            <div class="card-body">
+                <div id="port-trend-chart" style="height: 300px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 统计分析 -->
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">端口统计</h5>
+            </div>
+            <div class="card-body">
+                <div id="port-stats">
+                    <!-- 统计信息通过JS动态加载 -->
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">进程统计</h5>
+            </div>
+            <div class="card-body">
+                <div id="process-stats">
+                    <!-- 进程统计通过JS动态加载 -->
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">风险分析</h5>
+            </div>
+            <div class="card-body">
+                <div id="risk-analysis">
+                    <!-- 风险分析通过JS动态加载 -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 详细数据表格 -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">详细端口数据</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>端口</th>
+                                <th>协议</th>
+                                <th>状态</th>
+                                <th>进程名</th>
+                                <th>PID</th>
+                                <th>用户</th>
+                                <th>命令行</th>
+                                <th>启动时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detail-table">
+                            <!-- 详细数据通过JS动态加载 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 初始化图表
+    const analysisChart = echarts.init(document.getElementById('port-analysis-chart'));
+    const trendChart = echarts.init(document.getElementById('port-trend-chart'));
+
+    // 加载详情数据
+    function loadDetailData() {
+        // 加载端口状态
+        fetch('/api/port-status')
+            .then(response => response.json())
+            .then(data => {
+                updateDetailTable(data.current_ports);
+                updatePortStats(data.current_ports);
+                updateProcessStats(data.current_ports);
+                updateAnalysisCharts(data.current_ports);
+            });
+
+        // 加载系统信息
+        fetch('/api/system-info')
+            .then(response => response.json())
+            .then(data => {
+                updateSystemOverview(data);
+                updateRiskAnalysis(data);
+            });
+    }
+
+    // 更新系统概览
+    function updateSystemOverview(systemInfo) {
+        const overview = document.getElementById('system-overview');
+        overview.innerHTML = `
+            <div class="col-md-3">
+                <div class="d-flex align-items-center">
+                    <div class="me-3">
+                        <div class="bg-primary rounded p-2 text-white">
+                            <i class="bi bi-cpu"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <h6 class="mb-0">CPU使用率</h6>
+                        <h4 class="mb-0">${systemInfo.system.cpu_percent}%</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="d-flex align-items-center">
+                    <div class="me-3">
+                        <div class="bg-success rounded p-2 text-white">
+                            <i class="bi bi-memory"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <h6 class="mb-0">内存使用率</h6>
+                        <h4 class="mb-0">${systemInfo.system.memory_percent}%</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="d-flex align-items-center">
+                    <div class="me-3">
+                        <div class="bg-warning rounded p-2 text-white">
+                            <i class="bi bi-hdd"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <h6 class="mb-0">磁盘使用率</h6>
+                        <h4 class="mb-0">${systemInfo.system.disk_usage}%</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="d-flex align-items-center">
+                    <div class="me-3">
+                        <div class="bg-info rounded p-2 text-white">
+                            <i class="bi bi-people"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <h6 class="mb-0">在线用户</h6>
+                        <h4 class="mb-0">${systemInfo.system.users.length}</h4>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // 更新详细表格
+    function updateDetailTable(ports) {
+        const tbody = document.getElementById('detail-table');
+        
+        if (!ports || ports.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="9" class="text-center text-muted py-4">
+                        暂无端口数据
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = ports.map(port => `
+            <tr>
+                <td>
+                    <span class="badge bg-primary">${port.port}</span>
+                </td>
+                <td>${port.protocol}</td>
+                <td>
+                    <span class="badge bg-${getStateClass(port.state)}">${port.state}</span>
+                </td>
+                <td>${port.process_name || '未知'}</td>
+                <td>${port.pid || 'N/A'}</td>
+                <td>${port.user || '未知'}</td>
+                <td>
+                    <span class="text-truncate" style="max-width: 200px;" 
+                          title="${port.cmdline || ''}">
+                        ${port.cmdline || '无'}
+                    </span>
+                </td>
+                <td>${port.start_time || '未知'}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-info" 
+                            onclick="showPortDetails(${port.port})">
+                        详情
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    // 更新端口统计
+    function updatePortStats(ports) {
+        const stats = document.getElementById('port-stats');
+        
+        if (!ports) {
+            stats.innerHTML = '<p class="text-muted">暂无数据</p>';
+            return;
+        }
+
+        const portCount = ports.length;
+        const tcpPorts = ports.filter(p => p.protocol === 'TCP').length;
+        const listeningPorts = ports.filter(p => p.state === 'LISTEN').length;
+        
+        // 常见端口统计
+        const commonPorts = ports.filter(p => [22, 80, 443, 3306, 5432].includes(p.port)).length;
+
+        stats.innerHTML = `
+            <div class="mb-3">
+                <strong>总端口数:</strong> ${portCount}
+            </div>
+            <div class="mb-3">
+                <strong>TCP端口:</strong> ${tcpPorts}
+            </div>
+            <div class="mb-3">
+                <strong>监听端口:</strong> ${listeningPorts}
+            </div>
+            <div class="mb-3">
+                <strong>常见服务端口:</strong> ${commonPorts}
+            </div>
+            <div>
+                <strong>非常见端口:</strong> ${portCount - commonPorts}
+            </div>
+        `;
+    }
+
+    // 更新进程统计
+    function updateProcessStats(ports) {
+        const stats = document.getElementById('process-stats');
+        
+        if (!ports) {
+            stats.innerHTML = '<p class="text-muted">暂无数据</p>';
+            return;
+        }
+
+        // 按进程分组
+        const processMap = {};
+        ports.forEach(port => {
+            const processName = port.process_name || '未知进程';
+            if (!processMap[processName]) {
+                processMap[processName] = {
+                    count: 0,
+                    ports: []
+                };
+            }
+            processMap[processName].count++;
+            processMap[processName].ports.push(port.port);
+        });
+
+        // 生成统计HTML
+        let statsHTML = '';
+        Object.entries(processMap)
+            .sort((a, b) => b[1].count - a[1].count)
+            .forEach(([name, data]) => {
+                statsHTML += `
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between">
+                            <span class="text-truncate" style="max-width: 120px;" title="${name}">
+                                ${name}
+                            </span>
+                            <span class="badge bg-secondary">${data.count}</span>
+                        </div>
+                        <small class="text-muted">
+                            端口: ${data.ports.join(', ')}
+                        </small>
+                    </div>
+                `;
+            });
+
+        stats.innerHTML = statsHTML || '<p class="text-muted">无进程数据</p>';
+    }
+
+    // 更新分析图表
+    function updateAnalysisCharts(ports) {
+        if (!ports) return;
+
+        // 端口分布分析图表
+        const protocolData = {};
+        const stateData = {};
+        
+        ports.forEach(port => {
+            // 协议统计
+            protocolData[port.protocol] = (protocolData[port.protocol] || 0) + 1;
+            // 状态统计
+            stateData[port.state] = (stateData[port.state] || 0) + 1;
+        });
+
+        // 分析图表配置
+        const analysisOption = {
+            tooltip: {
+                trigger: 'item'
+            },
+            legend: {
+                bottom: '0%',
+                left: 'center'
+            },
+            series: [
+                {
+                    name: '协议分布',
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    center: ['25%', '45%'],
+                    data: Object.entries(protocolData).map(([name, value]) => ({
+                        name: name,
+                        value: value
+                    }))
+                },
+                {
+                    name: '状态分布',
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    center: ['75%', '45%'],
+                    data: Object.entries(stateData).map(([name, value]) => ({
+                        name: name,
+                        value: value
+                    }))
+                }
+            ]
+        };
+
+        analysisChart.setOption(analysisOption);
+
+        // 趋势图表配置（模拟数据）
+        const trendOption = {
+            tooltip: {
+                trigger: 'axis'
+            },
+            xAxis: {
+                type: 'category',
+                data: ['1小时前', '45分前', '30分前', '15分前', '当前']
+            },
+            yAxis: {
+                type: 'value'
+            },
+            series: [{
+                data: [Math.max(0, ports.length - 3), Math.max(0, ports.length - 2), 
+                       Math.max(0, ports.length - 1), Math.max(0, ports.length - 1), ports.length],
+                type: 'line',
+                smooth: true,
+                lineStyle: {
+                    color: '#1890ff'
+                },
+                areaStyle: {
+                    color: 'rgba(24, 144, 255, 0.3)'
+                }
+            }]
+        };
+
+        trendChart.setOption(trendOption);
+    }
+
+    // 更新风险分析
+    function updateRiskAnalysis(systemInfo) {
+        const analysis = document.getElementById('risk-analysis');
+        
+        const risks = [];
+        const load = systemInfo.load['1min'];
+        
+        if (load > 2.0) {
+            risks.push({
+                level: 'high',
+                message: '系统负载较高，可能影响监控性能'
+            });
+        }
+        
+        if (systemInfo.system.memory_percent > 80) {
+            risks.push({
+                level: 'medium',
+                message: '内存使用率较高'
+            });
+        }
+
+        if (risks.length === 0) {
+            analysis.innerHTML = `
+                <div class="text-center text-success">
+                    <i class="bi bi-check-circle-fill" style="font-size: 2rem;"></i>
+                    <p class="mt-2 mb-0">系统运行正常</p>
+                </div>
+            `;
+        } else {
+            analysis.innerHTML = risks.map(risk => `
+                <div class="alert alert-${risk.level === 'high' ? 'danger' : 'warning'} mb-2">
+                    <small>${risk.message}</small>
+                </div>
+            `).join('');
+        }
+    }
+
+    // 显示端口详情
+    function showPortDetails(port) {
+        alert(`端口 ${port} 的详细分析功能开发中...`);
+        // 这里可以实现模态框显示端口的详细历史数据和关联信息
+    }
+
+    // 刷新数据
+    function refreshData() {
+        loadDetailData();
+        showToast('数据已刷新', 'success');
+    }
+
+    // 导出数据
+    function exportData() {
+        // 简单的导出实现
+        const data = {
+            timestamp: new Date().toISOString(),
+            type: 'portsentry_report'
+        };
+        
+        const blob = new Blob([JSON.stringify(data, null, 2)], {
+            type: 'application/json'
+        });
+        
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `portsentry_report_${new Date().getTime()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        showToast('报告导出成功', 'success');
+    }
+
+    // 显示提示
+    function showToast(message, type) {
+        alert(`[${type.toUpperCase()}] ${message}`);
+    }
+
+    // 获取状态样式类
+    function getStateClass(state) {
+        switch(state) {
+            case 'LISTEN': return 'success';
+            case 'ESTABLISHED': return 'primary';
+            case 'TIME_WAIT': return 'warning';
+            case 'CLOSE_WAIT': return 'danger';
+            default: return 'secondary';
+        }
+    }
+
+    // 页面加载时初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDetailData();
+        
+        // 图表自适应
+        window.addEventListener('resize', function() {
+            analysisChart.resize();
+            trendChart.resize();
+        });
+
+        // 每10秒自动刷新数据
+        setInterval(loadDetailData, 10000);
+    });
+</script>
+
+<style>
+.text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bg-primary, .bg-success, .bg-warning, .bg-info {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+</style>
+{% endblock %}
