@@ -1,4 +1,6 @@
-/* 自定义样式 */
+/* -------------------------------
+   基础样式
+-------------------------------- */
 body {
     background-color: #f8f9fa;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -27,28 +29,22 @@ body {
     color: #495057;
 }
 
+/* -------------------------------
+   Alert 样式
+-------------------------------- */
 .alert {
     border: none;
     border-left: 4px solid;
 }
 
-.alert-warning {
-    border-left-color: #ffc107;
-}
+.alert-warning { border-left-color: #ffc107; }
+.alert-danger  { border-left-color: #dc3545; }
+.alert-info    { border-left-color: #0dcaf0; }
+.alert-success { border-left-color: #198754; }
 
-.alert-danger {
-    border-left-color: #dc3545;
-}
-
-.alert-info {
-    border-left-color: #0dcaf0;
-}
-
-.alert-success {
-    border-left-color: #198754;
-}
-
-/* 状态指示器 */
+/* -------------------------------
+   状态指示器
+-------------------------------- */
 .status-indicator {
     display: inline-block;
     width: 8px;
@@ -57,80 +53,51 @@ body {
     margin-right: 8px;
 }
 
-.status-active {
-    background-color: #28a745;
-}
+.status-active   { background-color: #28a745; }
+.status-inactive { background-color: #dc3545; }
+.status-warning  { background-color: #ffc107; }
 
-.status-inactive {
-    background-color: #dc3545;
-}
-
-.status-warning {
-    background-color: #ffc107;
-}
-
-/* 自定义滚动条 */
+/* -------------------------------
+   自定义滚动条
+-------------------------------- */
 ::-webkit-scrollbar {
     width: 6px;
 }
-
 ::-webkit-scrollbar-track {
     background: #f1f1f1;
 }
-
 ::-webkit-scrollbar-thumb {
     background: #c1c1c1;
     border-radius: 3px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
     background: #a8a8a8;
 }
 
-/* 响应式调整 */
+/* -------------------------------
+   响应式
+-------------------------------- */
 @media (max-width: 768px) {
     .container {
         padding-left: 10px;
         padding-right: 10px;
     }
-    
+
     .card-body {
         padding: 1rem;
     }
-    
+
     .table-responsive {
         font-size: 0.875rem;
     }
 }
 
-/* 动画效果 */
+
 .fade-in {
-    animation: fadeIn 0.3s ease-in;
+    animation: fadeSoft 0.4s ease-out;
 }
 
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* 加载动画 */
-.loading {
-    display: inline-block;
-    width: 20px;
-    height: 20px;
-    border: 3px solid #f3f3f3;
-    border-top: 3px solid #007bff;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+/* 仅当数据更新时添加的类 */
+.value-updated {
+    animation: fadeSoft 0.6s ease-out;
 }
