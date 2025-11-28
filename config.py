@@ -28,7 +28,8 @@ class Config:
     ALERT_EMAIL = os.environ.get('ALERT_EMAIL')
     
     # 端口配置
-    IGNORE_PORTS = [22, 80, 443, 3306, 5432]  # 忽略的常用端口
+    # IGNORE_PORTS = [22, 80, 443, 3306, 5432]  # 忽略的常用端口
+    IGNORE_PORTS = [5432]  # 忽略的常用端口
 
 class DevelopmentConfig(Config):
     DEBUG = True
