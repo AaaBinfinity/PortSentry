@@ -7,16 +7,29 @@
         <div class="card text-white bg-primary mb-3">
             <div class="card-body">
                 <h5 class="card-title">监听端口</h5>
-                <h2 class="card-text" id="listening-ports">0</h2>
+                <h2 class="card-text" id="listening-ports">
+                    <span class="loading-spinner"></span>
+                </h2>
             </div>
         </div>
     </div>
-
+    <div class="col-md-3">
+        <div class="card text-white bg-success mb-3">
+            <div class="card-body">
+                <h5 class="card-title">正常端口</h5>
+                <h2 class="card-text" id="normal-ports">
+                    <span class="loading-spinner"></span>
+                </h2>
+            </div>
+        </div>
+    </div>
     <div class="col-md-3">
         <div class="card text-white bg-warning mb-3">
             <div class="card-body">
                 <h5 class="card-title">告警数量</h5>
-                <h2 class="card-text" id="alert-count">0</h2>
+                <h2 class="card-text" id="alert-count">
+                    <span class="loading-spinner"></span>
+                </h2>
             </div>
         </div>
     </div>
@@ -24,7 +37,9 @@
         <div class="card text-white bg-info mb-3">
             <div class="card-body">
                 <h5 class="card-title">系统负载</h5>
-                <h2 class="card-text" id="system-load">0.0</h2>
+                <h2 class="card-text" id="system-load">
+                    <span class="loading-spinner"></span>
+                </h2>
             </div>
         </div>
     </div>
@@ -34,24 +49,42 @@
     <!-- 端口状态图表 -->
     <div class="col-md-8">
         <div class="card">
-            <div class="card-header">
-                <h5>端口状态监控</h5>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">端口状态监控</h5>
+                <div class="chart-controls">
+                    <select id="chart-type" class="form-select form-select-sm" style="width: auto;">
+                        <option value="pie">饼图</option>
+                        <option value="bar">柱状图</option>
+                        <option value="line">趋势图</option>
+                    </select>
+                </div>
             </div>
             <div class="card-body">
                 <div id="port-chart" style="height: 400px;"></div>
             </div>
         </div>
     </div>
-    
+
     <!-- 实时告警 -->
     <div class="col-md-4">
         <div class="card">
-            <div class="card-header">
-                <h5>实时告警</h5>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">实时告警</h5>
+    <div class="p-3"> <!-- 增加内边距方便查看 -->
+        <button id="refresh-alerts" class="btn btn-sm btn-outline-secondary">
+            <i class="fa fa-refresh"></i> <!-- 适配 Font Awesome 4 的刷新图标 -->
+        </button>
+        <button id="toggle-auto-refresh" class="btn btn-sm btn-outline-primary ms-1" title="自动刷新">
+            <i class="fa fa-play"></i> <!-- 适配 Font Awesome 4 的播放图标 -->
+        </button>
+    </div>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 <div id="alerts-list" style="max-height: 400px; overflow-y: auto;">
-                    <!-- 告警内容通过JS动态加载 -->
+                    <div class="text-center p-3 text-muted">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span class="ms-2">加载中...</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -62,152 +95,719 @@
     <!-- 端口列表 -->
     <div class="col-12">
         <div class="card">
-            <div class="card-header">
-                <h5>端口详情列表</h5>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">端口详情列表</h5>
+                <div>
+                    <input type="text" id="port-search" class="form-control form-control-sm" placeholder="搜索端口..." style="width: 200px; display: inline-block;">
+                    <button id="export-ports" class="btn btn-sm btn-outline-primary ms-2">
+                         导出
+                    </button>
+
+                    </button>
+                </div>
             </div>
             <div class="card-body">
-                <table class="table table-striped">
-                    <thead>
-                        <tr>
-                            <th>端口</th>
-                            <th>协议</th>
-                            <th>状态</th>
-                            <th>进程名</th>
-                            <th>PID</th>
-                            <th>用户</th>
-                            <th>启动时间</th>
-                        </tr>
-                    </thead>
-                    <tbody id="port-table">
-                        <!-- 端口数据通过JS动态加载 -->
-                    </tbody>
-                </table>
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+             <tr>
+                <th data-sort="port">端口  </th>
+                <th data-sort="protocol">协议 </th>
+                <th data-sort="state">状态 </th>
+                <th data-sort="process_name">进程名 </th>
+                <th data-sort="pid">PID </th>
+                <th data-sort="user">用户 </th>
+                <th data-sort="start_time">启动时间 </th>
+            </tr>
+                        </thead>
+                        <tbody id="port-table">
+                            <tr>
+                                <td colspan="8" class="text-center text-muted">
+                                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                                    <span class="ms-2">加载中...</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <div id="table-info" class="text-muted">显示 0 条记录</div>
+                    <nav>
+                        <ul id="pagination" class="pagination pagination-sm mb-0"></ul>
+                    </nav>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
+
 <script>
+    // 全局状态管理
+    const AppState = {
+        ports: [],
+        alerts: [],
+        currentPage: 1,
+        pageSize: 10,
+        sortField: 'port',
+        sortDirection: 'asc',
+        searchTerm: '',
+        chartType: 'pie',
+        autoRefreshEnabled: true,
+        refreshInterval: 5000,
+        chartHistory: [] // 用于存储图表历史数据
+    };
+
     // 初始化ECharts图表
     const portChart = echarts.init(document.getElementById('port-chart'));
-    
-    // 更新仪表板数据
-    function updateDashboard() {
-        fetch('/api/port-status')
-            .then(response => response.json())
-            .then(data => {
-                // 更新端口数量
-                document.getElementById('listening-ports').textContent = 
-                    data.current_ports ? data.current_ports.length : 0;
-                
-                // 更新端口表格
-                updatePortTable(data.current_ports);
-                
-                // 更新图表
-                updatePortChart(data.current_ports);
-            });
-        
-        fetch('/api/alerts?resolved=false')
-            .then(response => response.json())
-            .then(alerts => {
-                document.getElementById('alert-count').textContent = alerts.length;
-                updateAlertsList(alerts);
-            });
-        
-        fetch('/api/system-info')
-            .then(response => response.json())
-            .then(info => {
-                document.getElementById('system-load').textContent = 
-                    info.load['1min'].toFixed(2);
-            });
+
+    // 防抖函数
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
     }
-    
-    function updatePortTable(ports) {
-        const tbody = document.getElementById('port-table');
-        tbody.innerHTML = '';
-        
-        if (ports) {
-            ports.forEach(port => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${port.port}</td>
-                    <td>${port.protocol}</td>
-                    <td><span class="badge bg-success">${port.state}</span></td>
-                    <td>${port.process_name}</td>
-                    <td>${port.pid}</td>
-                    <td>${port.user}</td>
-                    <td>${port.start_time || ''}</td>
-                `;
-                tbody.appendChild(row);
-            });
+
+    // 节流函数 - 新增
+    function throttle(func, limit) {
+        let inThrottle;
+        return function() {
+            const args = arguments;
+            const context = this;
+            if (!inThrottle) {
+                func.apply(context, args);
+                inThrottle = true;
+                setTimeout(() => inThrottle = false, limit);
+            }
         }
     }
-    
-    function updatePortChart(ports) {
-        if (!ports) return;
-        
-        // 按进程分组统计
-        const processCount = {};
-        ports.forEach(port => {
-            const name = port.process_name || 'unknown';
-            processCount[name] = (processCount[name] || 0) + 1;
+
+    // 更新仪表板数据
+    async function updateDashboard() {
+        try {
+            await Promise.all([
+                updatePortStatus(),
+                updateAlerts(),
+                updateSystemLoad()
+            ]);
+        } catch (error) {
+            console.error('更新仪表板失败:', error);
+            showError('数据更新失败，请检查网络连接');
+        }
+    }
+
+    // 更新端口状态
+    async function updatePortStatus() {
+        try {
+            const response = await fetch('/api/port-status');
+            if (!response.ok) throw new Error('端口状态获取失败');
+
+            const data = await response.json();
+            AppState.ports = data.current_ports || [];
+
+            updatePortCounters();
+            updatePortTable();
+            updatePortChart();
+        } catch (error) {
+            console.error('更新端口状态失败:', error);
+            throw error;
+        }
+    }
+
+    async function updateSystemLoad() {
+        try {
+            const response = await fetch('/api/system-load');
+            if (!response.ok) throw new Error('系统负载获取失败');
+
+            const data = await response.json();
+            document.getElementById('system-load').textContent = data.load || 'N/A';
+        } catch (error) {
+            console.error('更新系统负载失败:', error);
+            document.getElementById('system-load').textContent = 'N/A';
+        }
+    }
+
+    // 更新端口计数器
+    function updatePortCounters() {
+        const totalPorts = AppState.ports.length;
+        const normalPorts = AppState.ports.filter(p => p.state === 'LISTEN').length;
+
+        document.getElementById('listening-ports').textContent = totalPorts;
+        document.getElementById('normal-ports').textContent = normalPorts;
+
+        // 添加动画效果
+        animateCounter('listening-ports', totalPorts);
+        animateCounter('normal-ports', normalPorts);
+    }
+
+    // 计数器动画
+    function animateCounter(elementId, targetValue) {
+        const element = document.getElementById(elementId);
+        const current = parseInt(element.textContent) || 0;
+        const diff = targetValue - current;
+
+        if (diff !== 0) {
+            element.style.color = diff > 0 ? '#28a745' : '#dc3545';
+            setTimeout(() => element.style.color = '', 1000);
+        }
+    }
+
+    // 更新端口表格
+    function updatePortTable() {
+        const tbody = document.getElementById('port-table');
+
+        // 过滤和排序
+        let filteredPorts = AppState.ports.filter(port =>
+            port.port.toString().includes(AppState.searchTerm) ||
+            port.process_name?.toLowerCase().includes(AppState.searchTerm.toLowerCase()) ||
+            port.user?.toLowerCase().includes(AppState.searchTerm.toLowerCase())
+        );
+
+        // 排序
+        filteredPorts.sort((a, b) => {
+            let aVal = a[AppState.sortField];
+            let bVal = b[AppState.sortField];
+
+            if (AppState.sortField === 'port') {
+                aVal = parseInt(aVal);
+                bVal = parseInt(bVal);
+            }
+
+            if (aVal < bVal) return AppState.sortDirection === 'asc' ? -1 : 1;
+            if (aVal > bVal) return AppState.sortDirection === 'asc' ? 1 : -1;
+            return 0;
         });
-        
-        const option = {
-            tooltip: {
-                trigger: 'item'
-            },
-            legend: {
-                orient: 'vertical',
-                left: 'left'
-            },
-            series: [{
-                name: '端口分布',
-                type: 'pie',
-                radius: '50%',
-                data: Object.entries(processCount).map(([name, value]) => ({
-                    name: name,
-                    value: value
-                })),
-                emphasis: {
-                    itemStyle: {
-                        shadowBlur: 10,
-                        shadowOffsetX: 0,
-                        shadowColor: 'rgba(0, 0, 0, 0.5)'
+
+        // 分页
+        const startIndex = (AppState.currentPage - 1) * AppState.pageSize;
+        const paginatedPorts = filteredPorts.slice(startIndex, startIndex + AppState.pageSize);
+
+        // 更新表格
+        if (paginatedPorts.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="text-center text-muted">暂无数据</td>
+                </tr>
+            `;
+        } else {
+            tbody.innerHTML = paginatedPorts.map(port => `
+                <tr>
+                    <td><span class="badge bg-primary">${port.port}</span></td>
+                    <td>${port.protocol}</td>
+                    <td><span class="badge ${getStateBadgeClass(port.state)}">${port.state}</span></td>
+                    <td>${port.process_name || 'N/A'}</td>
+                    <td>${port.pid || 'N/A'}</td>
+                    <td>${port.user || 'N/A'}</td>
+                    <td>${formatTime(port.start_time) || 'N/A'}</td>
+
+                </tr>
+            `).join('');
+        }
+
+        updatePagination(filteredPorts.length);
+        updateTableInfo(filteredPorts.length);
+    }
+
+    // 获取状态徽章类名
+    function getStateBadgeClass(state) {
+        const stateClasses = {
+            'LISTEN': 'bg-success',
+            'ESTABLISHED': 'bg-primary',
+            'CLOSE_WAIT': 'bg-warning',
+            'TIME_WAIT': 'bg-secondary'
+        };
+        return stateClasses[state] || 'bg-secondary';
+    }
+
+    // 格式化时间
+    function formatTime(timestamp) {
+        if (!timestamp) return '';
+        return new Date(timestamp).toLocaleString();
+    }
+
+    // 更新分页
+    function updatePagination(totalItems) {
+        const totalPages = Math.ceil(totalItems / AppState.pageSize);
+        const pagination = document.getElementById('pagination');
+
+        if (totalPages <= 1) {
+            pagination.innerHTML = '';
+            return;
+        }
+
+        let html = '';
+
+        // 上一页
+        html += `<li class="page-item ${AppState.currentPage === 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-page="${AppState.currentPage - 1}">上一页</a>
+        </li>`;
+
+        // 页码
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= AppState.currentPage - 2 && i <= AppState.currentPage + 2)) {
+                html += `<li class="page-item ${i === AppState.currentPage ? 'active' : ''}">
+                    <a class="page-link" href="#" data-page="${i}">${i}</a>
+                </li>`;
+            } else if (i === AppState.currentPage - 3 || i === AppState.currentPage + 3) {
+                html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+            }
+        }
+
+        // 下一页
+        html += `<li class="page-item ${AppState.currentPage === totalPages ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-page="${AppState.currentPage + 1}">下一页</a>
+        </li>`;
+
+        pagination.innerHTML = html;
+    }
+
+    // 更新表格信息
+    function updateTableInfo(totalItems) {
+        const start = (AppState.currentPage - 1) * AppState.pageSize + 1;
+        const end = Math.min(start + AppState.pageSize - 1, totalItems);
+        document.getElementById('table-info').textContent =
+            `显示第 ${start} 到 ${end} 条记录，共 ${totalItems} 条`;
+    }
+
+    // 更新端口图表
+    function updatePortChart() {
+        if (!AppState.ports.length) {
+            portChart.setOption({
+                title: {
+                    text: '暂无数据',
+                    left: 'center',
+                    top: 'center',
+                    textStyle: {
+                        color: '#999',
+                        fontSize: 14
                     }
                 }
-            }]
-        };
-        
-        portChart.setOption(option);
+            });
+            return;
+        }
+
+        let option;
+
+        if (AppState.chartType === 'pie') {
+            // 饼图：按进程分布
+            const processCount = {};
+            AppState.ports.forEach(port => {
+                const name = port.process_name || 'unknown';
+                processCount[name] = (processCount[name] || 0) + 1;
+            });
+
+            option = {
+                title: {
+                    text: '端口进程分布',
+                    left: 'center'
+                },
+                tooltip: {
+                    trigger: 'item',
+                    formatter: '{a} <br/>{b}: {c} ({d}%)'
+                },
+                legend: {
+                    orient: 'vertical',
+                    left: 'left',
+                    type: 'scroll'
+                },
+                series: [{
+                    name: '端口数量',
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    avoidLabelOverlap: false,
+                    itemStyle: {
+                        borderRadius: 10,
+                        borderColor: '#fff',
+                        borderWidth: 2
+                    },
+                    label: {
+                        show: false,
+                        position: 'center'
+                    },
+                    emphasis: {
+                        label: {
+                            show: true,
+                            fontSize: 18,
+                            fontWeight: 'bold'
+                        }
+                    },
+                    labelLine: {
+                        show: false
+                    },
+                    data: Object.entries(processCount)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([name, value]) => ({ name, value }))
+                }]
+            };
+        } else if (AppState.chartType === 'bar') {
+            // 柱状图：按端口范围分布
+            const portRanges = {
+                '0-1023': 0,
+                '1024-49151': 0,
+                '49152-65535': 0
+            };
+
+            AppState.ports.forEach(port => {
+                const portNum = parseInt(port.port);
+                if (portNum <= 1023) portRanges['0-1023']++;
+                else if (portNum <= 49151) portRanges['1024-49151']++;
+                else portRanges['49152-65535']++;
+            });
+
+            option = {
+                title: {
+                    text: '端口范围分布',
+                    left: 'center'
+                },
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: {
+                        type: 'shadow'
+                    }
+                },
+                xAxis: {
+                    type: 'category',
+                    data: Object.keys(portRanges)
+                },
+                yAxis: {
+                    type: 'value',
+                    name: '端口数量'
+                },
+                series: [{
+                    name: '端口数量',
+                    type: 'bar',
+                    data: Object.values(portRanges),
+                    itemStyle: {
+                        color: function(params) {
+                            const colors = ['#5470c6', '#91cc75', '#fac858'];
+                            return colors[params.dataIndex] || '#5470c6';
+                        }
+                    }
+                }]
+            };
+        } else {
+            // 趋势图：端口数量变化 - 新增
+            const now = new Date();
+            AppState.chartHistory.push({
+                time: now,
+                count: AppState.ports.length
+            });
+
+            // 只保留最近20个数据点
+            if (AppState.chartHistory.length > 20) {
+                AppState.chartHistory.shift();
+            }
+
+            option = {
+                title: {
+                    text: '端口数量趋势',
+                    left: 'center'
+                },
+                tooltip: {
+                    trigger: 'axis'
+                },
+                xAxis: {
+                    type: 'category',
+                    data: AppState.chartHistory.map(item =>
+                        `${item.time.getHours()}:${item.time.getMinutes().toString().padStart(2, '0')}`
+                    )
+                },
+                yAxis: {
+                    type: 'value',
+                    name: '端口数量'
+                },
+                series: [{
+                    name: '端口数量',
+                    type: 'line',
+                    data: AppState.chartHistory.map(item => item.count),
+                    smooth: true,
+                    itemStyle: {
+                        color: '#5470c6'
+                    },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(84, 112, 198, 0.5)' },
+                            { offset: 1, color: 'rgba(84, 112, 198, 0.1)' }
+                        ])
+                    }
+                }]
+            };
+        }
+
+        portChart.setOption(option, true);
     }
-    
-    function updateAlertsList(alerts) {
-        const container = document.getElementById('alerts-list');
-        container.innerHTML = '';
-        
-        alerts.slice(0, 5).forEach(alert => {
-            const alertElement = document.createElement('div');
-            alertElement.className = `alert alert-${getAlertClass(alert.level)} mb-2`;
-            alertElement.innerHTML = `
-                <h6>${alert.title}</h6>
-                <small>${alert.message}</small>
-                <br><small class="text-muted">${alert.timestamp}</small>
-            `;
-            container.appendChild(alertElement);
-        });
-    }
-    
-    function getAlertClass(level) {
-        switch(level.toLowerCase()) {
-            case 'error': return 'danger';
-            case 'warning': return 'warning';
-            default: return 'info';
+
+    // 更新告警
+    async function updateAlerts() {
+        try {
+            const response = await fetch('/api/alerts?resolved=false&limit=10');
+            if (!response.ok) throw new Error('告警信息获取失败');
+
+            const alerts = await response.json();
+            AppState.alerts = alerts;
+
+            document.getElementById('alert-count').textContent = alerts.length;
+            animateCounter('alert-count', alerts.length);
+            updateAlertsList(alerts);
+        } catch (error) {
+            console.error('更新告警失败:', error);
+            // 不显示错误，避免影响其他功能
         }
     }
-    
-    // 每3秒更新一次数据
-    setInterval(updateDashboard, 3000);
-    updateDashboard(); // 初始加载
+
+    // 更新告警列表
+function updateAlertsList(alerts) {
+    const container = document.getElementById('alerts-list');
+
+    if (alerts.length === 0) {
+        container.innerHTML = `
+            <div class="text-center p-3 text-primary">
+                <i class="fas fa-check-circle fa-2x mb-2 text-primary"></i>
+                <div>暂无告警</div>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = alerts.slice(0, 5).map(alert => `
+        <div class="alert alert-primary mb-0 border-0 rounded-0 border-bottom border-primary-subtle" role="alert">
+            <div class="d-flex justify-content-between align-items-start">
+                <h6 class="alert-heading mb-1 text-primary-dark">${alert.title}</h6>
+                <small class="text-primary-muted">${formatRelativeTime(alert.timestamp)}</small>
+            </div>
+            <p class="mb-1 small text-primary-body">${alert.message}</p>
+            ${alert.port ? `<small class="text-primary-muted">端口: ${alert.port}</small>` : ''}
+            <div class="mt-2">
+                <button class="btn btn-sm btn-outline-primary" onclick="resolveAlert(${alert.id})">
+                    标记已解决
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// 修复时区问题：处理 UTC 时间戳/ISO 字符串，转为本地时间计算
+// 强制 UTC 时区计算（仅适用于后端返回本地时区时间戳的场景）
+function formatRelativeTime(timestamp) {
+    const now = new Date();
+    let time = new Date(timestamp);
+
+    if (isNaN(time.getTime())) {
+        return timestamp;
+    }
+
+    // 关键：都转为 UTC 时间戳计算差值，避免时区偏移
+    const nowUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes());
+    const timeUtc = Date.UTC(time.getFullYear(), time.getMonth(), time.getDate(), time.getHours(), time.getMinutes());
+    const diff = nowUtc - timeUtc;
+
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (minutes < 1) return '刚刚';
+    if (minutes < 60) return `${minutes}分钟前`;
+    if (hours < 24) return `${hours}小时前`;
+    return `${days}天前`;
+}
+
+    // 获取告警类名
+    function getAlertClass(level) {
+        // 处理大写字母的级别
+        const levelUpper = (level || '').toUpperCase();
+        const levelClasses = {
+            'CRITICAL': 'danger',
+            'ERROR': 'danger',
+            'WARNING': 'warning',
+            'INFO': 'info',
+            'SUCCESS': 'success'
+        };
+        return levelClasses[levelUpper] || 'info';
+    }
+
+
+
+    // 解决告警
+    async function resolveAlert(alertId) {
+        try {
+            const response = await fetch(`/api/resolve-alert/${alertId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.ok) {
+                showSuccess('告警已标记为已解决');
+                updateAlerts();
+            } else {
+                throw new Error('操作失败');
+            }
+        } catch (error) {
+            console.error('解决告警失败:', error);
+            showError('操作失败');
+        }
+    }
+
+    // 导出端口
+    function exportPorts() {
+        const csv = [
+            ['端口', '协议', '状态', '进程名', 'PID', '用户', '启动时间'],
+            ...AppState.ports.map(port => [
+                port.port,
+                port.protocol,
+                port.state,
+                port.process_name || '',
+                port.pid || '',
+                port.user || '',
+                port.start_time || ''
+            ])
+        ].map(row => row.join(',')).join('\n');
+
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ports-${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // 显示错误提示
+    function showError(message) {
+        showNotification(message, 'danger');
+    }
+
+    // 显示成功提示
+    function showSuccess(message) {
+        showNotification(message, 'success');
+    }
+
+    // 显示通知 - 重构
+    function showNotification(message, type) {
+        // 移除现有的通知
+        const existingNotifications = document.querySelectorAll('.custom-notification');
+        existingNotifications.forEach(notification => notification.remove());
+
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type} alert-dismissible fade show custom-notification position-fixed`;
+        notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+        notification.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(notification);
+
+        const dismissTime = type === 'success' ? 3000 : 5000;
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, dismissTime);
+    }
+
+    // 切换自动刷新
+    function toggleAutoRefresh() {
+        AppState.autoRefreshEnabled = !AppState.autoRefreshEnabled;
+        const button = document.getElementById('toggle-auto-refresh');
+        const icon = button.querySelector('i');
+
+        if (AppState.autoRefreshEnabled) {
+            icon.className = 'fas fa-pause';
+            button.title = '暂停自动刷新';
+            showSuccess('自动刷新已启用');
+        } else {
+            icon.className = 'fas fa-play';
+            button.title = '启用自动刷新';
+            showSuccess('自动刷新已暂停');
+        }
+    }
+
+    // 事件监听器
+    document.getElementById('port-search').addEventListener('input', debounce(function(e) {
+        AppState.searchTerm = e.target.value;
+        AppState.currentPage = 1;
+        updatePortTable();
+    }, 300));
+
+    document.getElementById('chart-type').addEventListener('change', function(e) {
+        AppState.chartType = e.target.value;
+        updatePortChart();
+    });
+
+    document.getElementById('refresh-alerts').addEventListener('click', updateAlerts);
+    document.getElementById('export-ports').addEventListener('click', exportPorts);
+    document.getElementById('toggle-auto-refresh').addEventListener('click', toggleAutoRefresh);
+
+    document.getElementById('pagination').addEventListener('click', function(e) {
+        e.preventDefault();
+        if (e.target.tagName === 'A') {
+            AppState.currentPage = parseInt(e.target.dataset.page);
+            updatePortTable();
+        }
+    });
+
+    // 表格排序
+    document.querySelectorAll('th[data-sort]').forEach(th => {
+        th.addEventListener('click', function() {
+            const field = this.dataset.sort;
+            if (AppState.sortField === field) {
+                AppState.sortDirection = AppState.sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                AppState.sortField = field;
+                AppState.sortDirection = 'asc';
+            }
+            updatePortTable();
+            updateSortIcons();
+        });
+    });
+
+    // 更新排序图标
+    function updateSortIcons() {
+        document.querySelectorAll('th[data-sort]').forEach(th => {
+            const icon = th.querySelector('.sort-icon');
+            if (th.dataset.sort === AppState.sortField) {
+                icon.className = `fas fa-sort-${AppState.sortDirection === 'asc' ? 'up' : 'down'}`;
+            } else {
+                icon.className = 'fas fa-sort';
+            }
+        });
+    }
+
+    // 响应窗口大小变化
+    window.addEventListener('resize', throttle(function() {
+        portChart.resize();
+    }, 250));
+
+    // 定期更新数据
+    let refreshIntervalId;
+    function startAutoRefresh() {
+        refreshIntervalId = setInterval(() => {
+            if (AppState.autoRefreshEnabled) {
+                updateDashboard();
+            }
+        }, AppState.refreshInterval);
+    }
+
+    // 页面可见性变化处理 - 新增
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            clearInterval(refreshIntervalId);
+        } else {
+            startAutoRefresh();
+        }
+    });
+
+    // 初始加载
+    updateDashboard();
+    updateSortIcons();
+    startAutoRefresh();
 </script>
+
 {% endblock %}
