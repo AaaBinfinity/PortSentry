@@ -104,7 +104,6 @@
                                 <th>用户</th>
                                 <th>命令行</th>
                                 <th>启动时间</th>
-                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody id="detail-table">
@@ -236,12 +235,7 @@
                     </span>
                 </td>
                 <td>${port.start_time || '未知'}</td>
-                <td>
-                    <button class="btn btn-sm btn-outline-info" 
-                            onclick="showPortDetails(${port.port})">
-                        详情
-                    </button>
-                </td>
+
             </tr>
         `).join('');
     }
