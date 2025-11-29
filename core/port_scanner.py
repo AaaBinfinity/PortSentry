@@ -44,6 +44,35 @@ class PortScanner:
             print(f"Netstat error: {e}")
             return ""  # 发生异常时返回空字符串
 
+    def get_port_detail(self, port):
+        """
+        获取指定端口的详细信息
+
+        Args:
+            port (int): 要查询的端口号
+
+        Returns:
+            dict: 包含端口详细信息的字典，如果端口不存在则返回空字典
+        """
+        try:
+            # 获取当前所有端口信息
+            current_ports = self.parse_port_info()
+
+            # 查找指定端口的信息
+            port_details = []
+            for port_data in current_ports:
+                if port_data['port'] == port:
+                    port_details.append(port_data)
+
+            if not port_details:
+                return {}
+
+            # 返回第一个匹配的端口信息（通常一个端口只有一个进程在使用）
+            return port_details[0]
+
+        except Exception as e:
+            print(f"Error getting port detail for {port}: {e}")
+            return {}
     def get_ss_info(self):
         """
         使用ss命令获取更详细的端口信息（ss是netstat的现代替代工具）

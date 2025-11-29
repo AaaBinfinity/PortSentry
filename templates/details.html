@@ -437,7 +437,7 @@
         updateTableInfo();
     }
 
-    // 应用过滤和搜索
+    // 应用过滤和搜索 - 确保分页重置
     function applyFilters() {
         DetailState.filteredPorts = DetailState.ports.filter(port => {
             const matchesSearch = !DetailState.searchTerm ||
@@ -454,10 +454,16 @@
             return matchesSearch && matchesProtocol && matchesState;
         });
 
-        DetailState.currentPage = 1; // 重置到第一页
+        // 确保当前页不超出范围
+        const totalPages = Math.ceil(DetailState.filteredPorts.length / DetailState.pageSize);
+        if (DetailState.currentPage > totalPages && totalPages > 0) {
+            DetailState.currentPage = totalPages;
+        } else if (DetailState.filteredPorts.length === 0) {
+            DetailState.currentPage = 1;
+        }
     }
 
-    // 更新分页
+    // 更新分页 - 修复版本
     function updatePagination() {
         const totalItems = DetailState.filteredPorts.length;
         const totalPages = Math.ceil(totalItems / DetailState.pageSize);
@@ -471,25 +477,54 @@
         let html = '';
 
         // 上一页
-        html += `<li class="page-item ${DetailState.currentPage === 1 ? 'disabled' : ''}">
+        const prevDisabled = DetailState.currentPage === 1 ? 'disabled' : '';
+        html += `<li class="page-item ${prevDisabled}">
             <a class="page-link" href="#" data-page="${DetailState.currentPage - 1}">
                 <i class="fas fa-chevron-left"></i>
             </a>
         </li>`;
 
         // 页码
-        for (let i = 1; i <= totalPages; i++) {
-            if (i === 1 || i === totalPages || (i >= DetailState.currentPage - 1 && i <= DetailState.currentPage + 1)) {
-                html += `<li class="page-item ${i === DetailState.currentPage ? 'active' : ''}">
-                    <a class="page-link" href="#" data-page="${i}">${i}</a>
-                </li>`;
-            } else if (i === DetailState.currentPage - 2 || i === DetailState.currentPage + 2) {
+        const maxVisiblePages = 5;
+        let startPage = Math.max(1, DetailState.currentPage - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+        // 调整起始页，确保显示maxVisiblePages个页码
+        if (endPage - startPage + 1 < maxVisiblePages) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+
+        // 第一页和省略号
+        if (startPage > 1) {
+            html += `<li class="page-item">
+                <a class="page-link" href="#" data-page="1">1</a>
+            </li>`;
+            if (startPage > 2) {
                 html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
             }
         }
 
+        // 中间页码
+        for (let i = startPage; i <= endPage; i++) {
+            const active = i === DetailState.currentPage ? 'active' : '';
+            html += `<li class="page-item ${active}">
+                <a class="page-link" href="#" data-page="${i}">${i}</a>
+            </li>`;
+        }
+
+        // 最后一页和省略号
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) {
+                html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+            }
+            html += `<li class="page-item">
+                <a class="page-link" href="#" data-page="${totalPages}">${totalPages}</a>
+            </li>`;
+        }
+
         // 下一页
-        html += `<li class="page-item ${DetailState.currentPage === totalPages ? 'disabled' : ''}">
+        const nextDisabled = DetailState.currentPage === totalPages ? 'disabled' : '';
+        html += `<li class="page-item ${nextDisabled}">
             <a class="page-link" href="#" data-page="${DetailState.currentPage + 1}">
                 <i class="fas fa-chevron-right"></i>
             </a>
@@ -498,13 +533,14 @@
         pagination.innerHTML = html;
     }
 
-    // 更新表格信息
+    // 更新表格信息 - 添加边界检查
     function updateTableInfo() {
         const totalItems = DetailState.filteredPorts.length;
-        const start = (DetailState.currentPage - 1) * DetailState.pageSize + 1;
+        const start = totalItems === 0 ? 0 : (DetailState.currentPage - 1) * DetailState.pageSize + 1;
         const end = Math.min(start + DetailState.pageSize - 1, totalItems);
+
         document.getElementById('table-info').textContent =
-            `显示第 ${start} 到 ${end} 条记录，共 ${totalItems} 条`;
+            totalItems === 0 ? '暂无数据' : `显示第 ${start} 到 ${end} 条记录，共 ${totalItems} 条`;
     }
 
     // 更新端口统计
@@ -1131,14 +1167,16 @@
     });
 
     // 分页点击
-    document.getElementById('pagination').addEventListener('click', function(e) {
-        e.preventDefault();
-        if (e.target.tagName === 'A') {
-            DetailState.currentPage = parseInt(e.target.dataset.page);
-            updateDetailTable();
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('#pagination')) {
+            e.preventDefault();
+            const target = e.target.closest('.page-link');
+            if (target && target.dataset.page) {
+                DetailState.currentPage = parseInt(target.dataset.page);
+                updateDetailTable();
+            }
         }
     });
-
     // 响应窗口大小变化
     window.addEventListener('resize', function() {
         analysisChart.resize();
