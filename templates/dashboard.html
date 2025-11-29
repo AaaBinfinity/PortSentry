@@ -226,10 +226,10 @@
             if (!response.ok) throw new Error('系统负载获取失败');
 
             const data = await response.json();
-            document.getElementById('system-load').textContent = data.load || 'N/A';
+            document.getElementById('system-load').textContent = data.load || '0';
         } catch (error) {
             console.error('更新系统负载失败:', error);
-            document.getElementById('system-load').textContent = 'N/A';
+            document.getElementById('system-load').textContent = '0';
         }
     }
 
@@ -546,7 +546,7 @@
     // 更新告警
     async function updateAlerts() {
         try {
-            const response = await fetch('/api/alerts?resolved=false&limit=10');
+            const response = await fetch('/api/alerts?resolved=all');
             if (!response.ok) throw new Error('告警信息获取失败');
 
             const alerts = await response.json();

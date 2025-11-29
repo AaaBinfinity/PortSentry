@@ -1,8 +1,40 @@
-# alert_manager.py - 优化警告分级
 import time
 import logging
 from datetime import datetime
 from sqlalchemy.exc import OperationalError, DisconnectionError
+
+# 尝试不同的导入方式
+try:
+    from core.database import Alert
+except ImportError:
+    try:
+        from models.alert import Alert
+    except ImportError:
+        # 如果都找不到，可能需要定义 Alert 模型
+        from core.database import db
+
+
+        class Alert(db.Model):
+            __tablename__ = 'alerts'
+
+            id = db.Column(db.Integer, primary_key=True)
+            level = db.Column(db.String(20), nullable=False)  # ERROR, WARNING, INFO
+            title = db.Column(db.String(200), nullable=False)
+            message = db.Column(db.Text, nullable=False)
+            port = db.Column(db.Integer, nullable=True)
+            timestamp = db.Column(db.DateTime, default=datetime.now)
+            resolved = db.Column(db.Boolean, default=False)
+
+            def to_dict(self):
+                return {
+                    'id': self.id,
+                    'level': self.level,
+                    'title': self.title,
+                    'message': self.message,
+                    'port': self.port,
+                    'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+                    'resolved': self.resolved
+                }
 
 
 class AlertManager:
@@ -21,6 +53,7 @@ class AlertManager:
             161, 389, 636, 873, 2049, 3128, 3690, 4848, 5000, 5432, 5901,
             5984, 6379, 7001, 8000, 8080, 8081, 8443, 9000, 9200, 9300
         }
+
 
     def _db_operation_with_retry(self, operation, *args, **kwargs):
         """带重试的数据库操作"""
@@ -42,6 +75,17 @@ class AlertManager:
                 logging.error(f"未知错误: {e}")
                 return []
 
+    def get_all_alerts(self, limit=None):
+        """获取所有告警（包括已解决和未解决的）- 带重试机制"""
+        from core.database import db, Alert
+
+        def _query_all_alerts():
+            query = Alert.query.order_by(Alert.timestamp.desc())
+            if limit:
+                query = query.limit(limit)
+            return query.all()
+
+        return self._db_operation_with_retry(_query_all_alerts)
     def _determine_alert_level(self, port_data, change_type):
         """根据端口和变化类型确定告警级别"""
         port = port_data.get('port', 0)
@@ -238,3 +282,4 @@ class AlertManager:
             return alert
 
         return self._db_operation_with_retry(_create_custom_alert)
+

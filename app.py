@@ -97,22 +97,34 @@ def create_app():
                         'last_scan_duration': scan_duration
                     })
 
-                    # 检查变化并生成告警
-                    if scan_result['changes']:
-                        alerts = alert_manager.check_port_changes(scan_result['changes'])
-                        if alerts:
-                            new_alerts = [alert.to_dict() for alert in alerts]
-                            app_state['alerts'].extend(new_alerts)
-                            # 只保留最近100条告警
-                            app_state['alerts'] = app_state['alerts'][-100:]
+                    # 检查变化并生成告警 - 确保告警保存到数据库
+                    if scan_result.get('changes'):
+                        try:
+                            alerts = alert_manager.check_port_changes(scan_result['changes'])
+                            if alerts:
+                                # 告警会自动保存到数据库，这里只需要记录日志
+                                logger.info(f"Generated {len(alerts)} new alerts")
 
-                            logger.info(f"Generated {len(alerts)} new alerts")
+                                # 更新内存中的告警列表用于实时显示
+                                db_alerts = alert_manager.get_all_alerts(limit=100)
+                                app_state['alerts'] = [{
+                                    'id': alert.id,
+                                    'title': alert.title,
+                                    'message': alert.message,
+                                    'level': alert.level,
+                                    'timestamp': alert.timestamp.isoformat() if alert.timestamp else None,
+                                    'resolved': alert.resolved,
+                                    'port': alert.port
+                                } for alert in db_alerts]
+
+                        except Exception as alert_error:
+                            logger.error(f"处理告警时出错: {alert_error}")
 
                     app_state['is_scanning'] = False
 
                     # 自适应扫描间隔
                     interval = config.SCAN_INTERVAL_IDLE
-                    if scan_result['changes']:
+                    if scan_result.get('changes'):
                         interval = config.SCAN_INTERVAL_BUSY
 
                     # 清理缓存
@@ -125,11 +137,6 @@ def create_app():
                     logger.error(f"Scanner error: {e}")
                     app_state['is_scanning'] = False
                     time.sleep(10)
-
-    # 启动后台扫描线程
-    scanner_thread = threading.Thread(target=background_scanner, daemon=True)
-    scanner_thread.start()
-
     # 路由定义
     @app.route('/')
     def dashboard():
@@ -142,6 +149,20 @@ def create_app():
         try:
             scan_data = app_state['last_scan'].copy()
 
+            # 添加调试日志
+            logger.info(f"Port status request - current ports: {len(scan_data.get('current_ports', []))}")
+            logger.info(f"Scanning status: {app_state['is_scanning']}")
+
+            # 如果端口数据为空，尝试立即扫描
+            if not scan_data.get('current_ports') and not app_state['is_scanning']:
+                logger.info("No port data available, triggering immediate scan")
+                try:
+                    scan_result = scanner.scan_ports()
+                    app_state['last_scan'] = scan_result
+                    scan_data = scan_result.copy()
+                except Exception as scan_error:
+                    logger.error(f"Immediate scan failed: {scan_error}")
+
             # 添加扫描统计信息
             scan_data.update({
                 'scan_stats': app_state['scan_stats'],
@@ -151,24 +172,28 @@ def create_app():
             return jsonify(scan_data)
         except Exception as e:
             logger.error(f"Error getting port status: {e}")
-            return jsonify({'error': 'Internal server error'}), 500
+            return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
 
     @app.route('/api/alerts')
     def get_alerts():
         """获取告警信息"""
         try:
-            resolved = request.args.get('resolved', 'false').lower() == 'true'
+            resolved = request.args.get('resolved', 'all')
             limit = request.args.get('limit', type=int)
 
             # 使用修复后的方法
-            alerts = alert_manager.get_alerts(resolved=resolved, limit=limit)
+            if resolved == 'all':
+                alerts = alert_manager.get_all_alerts(limit=limit)
+            else:
+                resolved_bool = resolved == 'true'
+                alerts = alert_manager.get_alerts(resolved=resolved_bool, limit=limit)
 
             return jsonify([{
                 'id': alert.id,
                 'title': alert.title,
                 'message': alert.message,
-                'level': alert.level.lower(),  # 统一转为小写
-                'alert_type': 'port_change',  # 根据标题推断类型
+                'level': alert.level.upper(),  # 统一转为大写，与前端匹配
+                'alert_type': 'port_change',
                 'port': alert.port,
                 'timestamp': alert.timestamp.isoformat() if alert.timestamp else None,
                 'resolved': alert.resolved
@@ -177,7 +202,6 @@ def create_app():
         except Exception as e:
             logger.error(f"Error getting alerts: {e}")
             return jsonify({'error': 'Internal server error'}), 500
-
     @app.route('/api/system-info')
     @cache_view(CACHE_TIMEOUT)
     def system_info():
@@ -428,12 +452,51 @@ def create_app():
     return app
 
 
+# 在 app.py 中修改数据库初始化部分
 if __name__ == '__main__':
     app = create_app()
 
     # 创建数据库表
     with app.app_context():
-        db.create_all()
+        try:
+            from core.database import db
+
+            # 新版本的 Flask-SQLAlchemy 使用不同的方式获取模型
+            try:
+                # 方法1: 新版本方式
+                models = list(db.Model.registry.mappers)
+                print(f"发现 {len(models)} 个已注册的模型")
+            except AttributeError:
+                try:
+                    # 方法2: 旧版本方式
+                    models = list(db.Model._decl_class_registry.keys())
+                    print(f"发现 {len(models)} 个已注册的模型: {models}")
+                except AttributeError:
+                    # 方法3: 直接创建表
+                    print("无法获取模型列表，直接创建表")
+
+            db.create_all()
+
+            # 检查 Alert 表是否存在
+            from sqlalchemy import inspect
+
+            inspector = inspect(db.engine)
+            table_names = inspector.get_table_names()
+            print(f"数据库中的表: {table_names}")
+
+            if 'alerts' in table_names:
+                from core.database import Alert
+
+                alert_count = Alert.query.count()
+                logger.info(f"Database initialized with {alert_count} existing alerts")
+            else:
+                logger.info("Alert table created successfully")
+
+        except Exception as e:
+            logger.error(f"Database initialization error: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
 
     # 启动前的系统检查
     logger.info("Starting Port Monitoring System...")

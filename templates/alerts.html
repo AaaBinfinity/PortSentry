@@ -108,18 +108,19 @@
     const alertsPerPage = 10;
 
     // 加载告警数据
-    function loadAlerts() {
-        fetch('/api/alerts?resolved=all')
-            .then(response => response.json())
-            .then(alerts => {
-                allAlerts = alerts;
-                updateAlertStats(alerts);
-                filterAlerts();
-            })
-            .catch(error => {
-                console.error('加载告警失败:', error);
-            });
-    }
+function loadAlerts() {
+    fetch('/api/alerts?resolved=all')
+        .then(response => response.json())
+        .then(alerts => {
+            console.log('Loaded alerts:', alerts); // 调试信息
+            allAlerts = alerts;
+            updateAlertStats(alerts);
+            filterAlerts();
+        })
+        .catch(error => {
+            console.error('加载告警失败:', error);
+        });
+}
 
     // 更新告警统计
     function updateAlertStats(alerts) {
@@ -135,51 +136,55 @@
     }
 
     // 筛选告警
-    function filterAlerts() {
-        const levelFilter = document.getElementById('level-filter').value;
-        const resolvedFilter = document.getElementById('resolved-filter').value;
-        const timeFilter = document.getElementById('time-filter').value;
-        const portFilter = document.getElementById('port-filter').value;
+function filterAlerts() {
+    const levelFilter = document.getElementById('level-filter').value;
+    const resolvedFilter = document.getElementById('resolved-filter').value;
+    const timeFilter = document.getElementById('time-filter').value;
+    const portFilter = document.getElementById('port-filter').value;
 
-        let filteredAlerts = allAlerts;
+    let filteredAlerts = allAlerts;
 
-        // 级别筛选
-        if (levelFilter !== 'all') {
-            filteredAlerts = filteredAlerts.filter(alert => alert.level === levelFilter);
-        }
-
-        // 解决状态筛选
-        if (resolvedFilter === 'unresolved') {
-            filteredAlerts = filteredAlerts.filter(alert => !alert.resolved);
-        } else if (resolvedFilter === 'resolved') {
-            filteredAlerts = filteredAlerts.filter(alert => alert.resolved);
-        }
-
-        // 时间筛选
-        if (timeFilter !== 'all') {
-            const hours = parseInt(timeFilter);
-            const cutoffTime = new Date();
-            cutoffTime.setHours(cutoffTime.getHours() - hours);
-            
-            filteredAlerts = filteredAlerts.filter(alert => {
-                const alertTime = new Date(alert.timestamp);
-                return alertTime >= cutoffTime;
-            });
-        }
-
-        // 端口筛选
-        if (portFilter) {
-            filteredAlerts = filteredAlerts.filter(alert => 
-                alert.port && alert.port.toString() === portFilter
-            );
-        }
-
-        // 按时间倒序排序
-        filteredAlerts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-        displayAlerts(filteredAlerts);
+    // 级别筛选
+    if (levelFilter !== 'all') {
+        filteredAlerts = filteredAlerts.filter(alert => alert.level === levelFilter);
     }
 
+    // 解决状态筛选
+    if (resolvedFilter === 'unresolved') {
+        filteredAlerts = filteredAlerts.filter(alert => !alert.resolved);
+    } else if (resolvedFilter === 'resolved') {
+        filteredAlerts = filteredAlerts.filter(alert => alert.resolved);
+    }
+
+    // 时间筛选 - 修复时间计算
+    if (timeFilter !== 'all') {
+        const hours = parseInt(timeFilter);
+        const cutoffTime = new Date();
+        cutoffTime.setHours(cutoffTime.getHours() - hours);
+
+        filteredAlerts = filteredAlerts.filter(alert => {
+            if (!alert.timestamp) return false;
+            const alertTime = new Date(alert.timestamp);
+            return alertTime >= cutoffTime;
+        });
+    }
+
+    // 端口筛选
+    if (portFilter) {
+        filteredAlerts = filteredAlerts.filter(alert =>
+            alert.port && alert.port.toString() === portFilter
+        );
+    }
+
+    // 按时间倒序排序
+    filteredAlerts.sort((a, b) => {
+        const timeA = a.timestamp ? new Date(a.timestamp) : new Date(0);
+        const timeB = b.timestamp ? new Date(b.timestamp) : new Date(0);
+        return timeB - timeA;
+    });
+
+    displayAlerts(filteredAlerts);
+}
     // 显示告警列表
     function displayAlerts(alerts) {
         const container = document.getElementById('alerts-container');
