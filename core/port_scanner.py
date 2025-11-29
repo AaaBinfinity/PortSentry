@@ -33,23 +33,31 @@ class PortScanner:
         except Exception as e:
             print(f"SS error: {e}")
             return ""
-    
+
     def parse_port_info(self):
         """解析端口信息"""
         port_info = []
-        
+
         # 方法1: 使用 psutil 获取网络连接
         try:
             for conn in psutil.net_connections(kind='inet'):
-                if conn.status == 'LISTEN' and conn.laddr:
+                if conn.laddr:  # 只处理有本地地址的连接
                     port = conn.laddr.port
                     pid = conn.pid
-                    
-                    process_info = self.get_process_info(pid)
-                    
+
+                    process_info = self.get_process_info(pid) if pid else {}
+
+                    # 确定协议类型
+                    if conn.type == socket.SOCK_STREAM:
+                        protocol = 'TCP'
+                    elif conn.type == socket.SOCK_DGRAM:
+                        protocol = 'UDP'
+                    else:
+                        protocol = 'UNKNOWN'
+
                     port_data = {
                         'port': port,
-                        'protocol': 'TCP',  # 简化处理
+                        'protocol': protocol,
                         'state': conn.status,
                         'pid': pid,
                         'process_name': process_info.get('name', 'unknown'),
@@ -57,13 +65,15 @@ class PortScanner:
                         'cmdline': process_info.get('cmdline', ''),
                         'exec_path': process_info.get('exe', ''),
                         'start_time': process_info.get('create_time', ''),
-                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'local_address': f"{conn.laddr.ip}:{conn.laddr.port}",
+                        'remote_address': f"{conn.raddr.ip}:{conn.raddr.port}" if conn.raddr else ""
                     }
-                    
+
                     port_info.append(port_data)
         except Exception as e:
             print(f"Psutil error: {e}")
-        
+        print(port_data)
         return port_info
     
     def get_process_info(self, pid):
