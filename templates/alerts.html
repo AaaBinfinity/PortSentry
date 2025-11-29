@@ -4,8 +4,12 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2>告警中心</h2>
     <div>
-        <button class="btn btn-outline-success" onclick="resolveAllAlerts()">标记全部为已解决</button>
-        <button class="btn btn-outline-primary" onclick="refreshAlerts()">刷新</button>
+        <button class="btn btn-outline-success" onclick="resolveAllAlerts()" id="resolve-all-btn">
+            标记全部为已解决
+        </button>
+        <button class="btn btn-outline-primary" onclick="refreshAlerts()" id="refresh-btn">
+            刷新
+        </button>
     </div>
 </div>
 
@@ -77,7 +81,37 @@
             </div>
             <div class="col-md-3">
                 <label class="form-label">端口号</label>
-                <input type="number" class="form-control" id="port-filter" placeholder="输入端口号" onchange="filterAlerts()">
+                <input type="number" class="form-control" id="port-filter" placeholder="输入端口号" oninput="debounceFilter()">
+            </div>
+        </div>
+        <!-- 新增搜索和排序功能 -->
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <label class="form-label">关键词搜索</label>
+                <input type="text" class="form-control" id="search-filter" placeholder="搜索告警标题或内容" oninput="debounceFilter()">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">排序方式</label>
+                <select class="form-select" id="sort-filter" onchange="filterAlerts()">
+                    <option value="time-desc">时间降序 (最新优先)</option>
+                    <option value="time-asc">时间升序 (最旧优先)</option>
+                    <option value="level-desc">级别降序 (严重优先)</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">每页显示</label>
+                <select class="form-select" id="page-size" onchange="changePageSize()">
+                    <option value="10">10条</option>
+                    <option value="25">25条</option>
+                    <option value="50">50条</option>
+                </select>
+            </div>
+        </div>
+        <!-- 重置筛选按钮 -->
+        <div class="row mt-3">
+            <div class="col-md-12">
+                <button class="btn btn-outline-secondary btn-sm" onclick="resetFilters()">重置筛选条件</button>
+                <span class="text-muted ms-3" id="filter-info">找到 0 条告警</span>
             </div>
         </div>
     </div>
@@ -85,14 +119,18 @@
 
 <!-- 告警列表 -->
 <div class="card">
-    <div class="card-header">
+    <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">告警列表</h5>
+        <div id="loading-indicator" class="d-none">
+            <span class="spinner-border spinner-border-sm" role="status"></span>
+            <span class="ms-1">加载中...</span>
+        </div>
     </div>
     <div class="card-body">
         <div id="alerts-container">
             <!-- 告警内容通过JS动态加载 -->
         </div>
-        
+
         <!-- 分页控件 -->
         <nav>
             <ul class="pagination justify-content-center" id="pagination">
@@ -102,25 +140,50 @@
     </div>
 </div>
 
+<!-- 自定义Toast提示 -->
+<div id="toast-container" style="position: fixed; top: 20px; right: 20px; z-index: 1050;"></div>
+
 <script>
     let allAlerts = [];
     let currentPage = 1;
-    const alertsPerPage = 10;
+    let alertsPerPage = 10;
+    let filterTimeout = null;
+    let isLoading = false;
 
     // 加载告警数据
-function loadAlerts() {
-    fetch('/api/alerts?resolved=all')
-        .then(response => response.json())
-        .then(alerts => {
-            console.log('Loaded alerts:', alerts); // 调试信息
-            allAlerts = alerts;
-            updateAlertStats(alerts);
-            filterAlerts();
-        })
-        .catch(error => {
-            console.error('加载告警失败:', error);
-        });
-}
+    function loadAlerts() {
+        if (isLoading) return;
+
+        isLoading = true;
+        showLoading(true);
+
+        fetch('/api/alerts?resolved=all')
+            .then(response => response.json())
+            .then(alerts => {
+                console.log('Loaded alerts:', alerts);
+                allAlerts = alerts;
+                updateAlertStats(alerts);
+                filterAlerts();
+            })
+            .catch(error => {
+                console.error('加载告警失败:', error);
+                showToast('加载告警数据失败', 'error');
+            })
+            .finally(() => {
+                isLoading = false;
+                showLoading(false);
+            });
+    }
+
+    // 显示/隐藏加载指示器
+    function showLoading(show) {
+        const loadingIndicator = document.getElementById('loading-indicator');
+        if (show) {
+            loadingIndicator.classList.remove('d-none');
+        } else {
+            loadingIndicator.classList.add('d-none');
+        }
+    }
 
     // 更新告警统计
     function updateAlertStats(alerts) {
@@ -135,61 +198,105 @@ function loadAlerts() {
         document.getElementById('resolved-count').textContent = resolved.length;
     }
 
+    // 防抖筛选函数
+    function debounceFilter() {
+        clearTimeout(filterTimeout);
+        filterTimeout = setTimeout(filterAlerts, 300);
+    }
+
     // 筛选告警
-function filterAlerts() {
-    const levelFilter = document.getElementById('level-filter').value;
-    const resolvedFilter = document.getElementById('resolved-filter').value;
-    const timeFilter = document.getElementById('time-filter').value;
-    const portFilter = document.getElementById('port-filter').value;
+    function filterAlerts() {
+        const levelFilter = document.getElementById('level-filter').value;
+        const resolvedFilter = document.getElementById('resolved-filter').value;
+        const timeFilter = document.getElementById('time-filter').value;
+        const portFilter = document.getElementById('port-filter').value;
+        const searchFilter = document.getElementById('search-filter').value.toLowerCase();
+        const sortFilter = document.getElementById('sort-filter').value;
 
-    let filteredAlerts = allAlerts;
+        let filteredAlerts = allAlerts;
 
-    // 级别筛选
-    if (levelFilter !== 'all') {
-        filteredAlerts = filteredAlerts.filter(alert => alert.level === levelFilter);
-    }
+        // 级别筛选
+        if (levelFilter !== 'all') {
+            filteredAlerts = filteredAlerts.filter(alert => alert.level === levelFilter);
+        }
 
-    // 解决状态筛选
-    if (resolvedFilter === 'unresolved') {
-        filteredAlerts = filteredAlerts.filter(alert => !alert.resolved);
-    } else if (resolvedFilter === 'resolved') {
-        filteredAlerts = filteredAlerts.filter(alert => alert.resolved);
-    }
+        // 解决状态筛选
+        if (resolvedFilter === 'unresolved') {
+            filteredAlerts = filteredAlerts.filter(alert => !alert.resolved);
+        } else if (resolvedFilter === 'resolved') {
+            filteredAlerts = filteredAlerts.filter(alert => alert.resolved);
+        }
 
-    // 时间筛选 - 修复时间计算
-    if (timeFilter !== 'all') {
-        const hours = parseInt(timeFilter);
-        const cutoffTime = new Date();
-        cutoffTime.setHours(cutoffTime.getHours() - hours);
+        // 时间筛选
+        if (timeFilter !== 'all') {
+            const hours = parseInt(timeFilter);
+            const cutoffTime = new Date();
+            cutoffTime.setHours(cutoffTime.getHours() - hours);
 
-        filteredAlerts = filteredAlerts.filter(alert => {
-            if (!alert.timestamp) return false;
-            const alertTime = new Date(alert.timestamp);
-            return alertTime >= cutoffTime;
+            filteredAlerts = filteredAlerts.filter(alert => {
+                if (!alert.timestamp) return false;
+                const alertTime = new Date(alert.timestamp);
+                return alertTime >= cutoffTime;
+            });
+        }
+
+        // 端口筛选
+        if (portFilter) {
+            filteredAlerts = filteredAlerts.filter(alert =>
+                alert.port && alert.port.toString() === portFilter
+            );
+        }
+
+        // 关键词搜索
+        if (searchFilter) {
+            filteredAlerts = filteredAlerts.filter(alert =>
+                alert.title.toLowerCase().includes(searchFilter) ||
+                alert.message.toLowerCase().includes(searchFilter)
+            );
+        }
+
+        // 排序
+        filteredAlerts.sort((a, b) => {
+            if (sortFilter === 'time-desc') {
+                const timeA = a.timestamp ? new Date(a.timestamp) : new Date(0);
+                const timeB = b.timestamp ? new Date(b.timestamp) : new Date(0);
+                return timeB - timeA;
+            } else if (sortFilter === 'time-asc') {
+                const timeA = a.timestamp ? new Date(a.timestamp) : new Date(0);
+                const timeB = b.timestamp ? new Date(b.timestamp) : new Date(0);
+                return timeA - timeB;
+            } else if (sortFilter === 'level-desc') {
+                const levelOrder = { 'ERROR': 3, 'WARNING': 2, 'INFO': 1 };
+                return (levelOrder[b.level] || 0) - (levelOrder[a.level] || 0);
+            }
+            return 0;
         });
+
+        // 更新筛选信息
+        document.getElementById('filter-info').textContent = `找到 ${filteredAlerts.length} 条告警`;
+
+        displayAlerts(filteredAlerts);
     }
 
-    // 端口筛选
-    if (portFilter) {
-        filteredAlerts = filteredAlerts.filter(alert =>
-            alert.port && alert.port.toString() === portFilter
-        );
+    // 重置筛选条件
+    function resetFilters() {
+        document.getElementById('level-filter').value = 'all';
+        document.getElementById('resolved-filter').value = 'all';
+        document.getElementById('time-filter').value = '24';
+        document.getElementById('port-filter').value = '';
+        document.getElementById('search-filter').value = '';
+        document.getElementById('sort-filter').value = 'time-desc';
+        document.getElementById('page-size').value = '10';
+        alertsPerPage = 10;
+        currentPage = 1;
+        filterAlerts();
     }
 
-    // 按时间倒序排序
-    filteredAlerts.sort((a, b) => {
-        const timeA = a.timestamp ? new Date(a.timestamp) : new Date(0);
-        const timeB = b.timestamp ? new Date(b.timestamp) : new Date(0);
-        return timeB - timeA;
-    });
-
-    displayAlerts(filteredAlerts);
-}
     // 显示告警列表
     function displayAlerts(alerts) {
         const container = document.getElementById('alerts-container');
         const pagination = document.getElementById('pagination');
-        
+
         // 分页计算
         const totalPages = Math.ceil(alerts.length / alertsPerPage);
         const startIndex = (currentPage - 1) * alertsPerPage;
@@ -202,6 +309,7 @@ function filterAlerts() {
                 <div class="text-center py-4">
                     <h5>暂无告警数据</h5>
                     <p class="text-muted">当前筛选条件下没有找到匹配的告警</p>
+                    <button class="btn btn-outline-primary btn-sm" onclick="resetFilters()">重置筛选条件</button>
                 </div>
             `;
         } else {
@@ -209,22 +317,26 @@ function filterAlerts() {
                 <div class="alert alert-${getAlertClass(alert.level)} d-flex justify-content-between align-items-start">
                     <div class="flex-grow-1">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h6 class="mb-0">${alert.title}</h6>
-                            <span class="badge bg-${getAlertClass(alert.level)}">${alert.level}</span>
+                            <h6 class="mb-0">${escapeHtml(alert.title)}</h6>
+                            <div>
+                                <span class="badge bg-${getAlertClass(alert.level)} me-1">${getAlertLevelText(alert.level)}</span>
+                                ${alert.resolved ? '<span class="badge bg-success">已解决</span>' : ''}
+                            </div>
                         </div>
-                        <p class="mb-1">${alert.message}</p>
+                        <p class="mb-1">${escapeHtml(alert.message)}</p>
                         <small class="text-muted">
                             ${alert.port ? `端口: ${alert.port} • ` : ''}
-                            时间: ${alert.timestamp}
+                            时间: ${formatDateTime(alert.timestamp)}
+                            ${formatRelativeTime(alert.timestamp) ? ` • ${formatRelativeTime(alert.timestamp)}` : ''}
                         </small>
                     </div>
                     <div class="ms-3">
                         ${!alert.resolved ? `
-                            <button class="btn btn-sm btn-outline-success" onclick="resolveAlert(${alert.id})">
+                            <button class="btn btn-sm btn-outline-success" onclick="resolveAlert(${alert.id})" id="resolve-btn-${alert.id}">
                                 标记解决
                             </button>
                         ` : `
-                            <span class="badge bg-success">已解决</span>
+                           
                         `}
                     </div>
                 </div>
@@ -238,14 +350,14 @@ function filterAlerts() {
     // 更新分页控件
     function updatePagination(totalPages) {
         const pagination = document.getElementById('pagination');
-        
+
         if (totalPages <= 1) {
             pagination.innerHTML = '';
             return;
         }
 
         let paginationHTML = '';
-        
+
         // 上一页
         if (currentPage > 1) {
             paginationHTML += `
@@ -255,8 +367,34 @@ function filterAlerts() {
             `;
         }
 
-        // 页码
-        for (let i = 1; i <= totalPages; i++) {
+        // 页码 - 显示最多5个页码
+        const maxVisiblePages = 5;
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+        // 调整起始页码，确保显示maxVisiblePages个页码
+        if (endPage - startPage + 1 < maxVisiblePages) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+
+        // 第一页
+        if (startPage > 1) {
+            paginationHTML += `
+                <li class="page-item">
+                    <a class="page-link" href="#" onclick="changePage(1)">1</a>
+                </li>
+            `;
+            if (startPage > 2) {
+                paginationHTML += `
+                    <li class="page-item disabled">
+                        <a class="page-link" href="#">...</a>
+                    </li>
+                `;
+            }
+        }
+
+        // 中间页码
+        for (let i = startPage; i <= endPage; i++) {
             if (i === currentPage) {
                 paginationHTML += `
                     <li class="page-item active">
@@ -270,6 +408,22 @@ function filterAlerts() {
                     </li>
                 `;
             }
+        }
+
+        // 最后一页
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) {
+                paginationHTML += `
+                    <li class="page-item disabled">
+                        <a class="page-link" href="#">...</a>
+                    </li>
+                `;
+            }
+            paginationHTML += `
+                <li class="page-item">
+                    <a class="page-link" href="#" onclick="changePage(${totalPages})">${totalPages}</a>
+                </li>
+            `;
         }
 
         // 下一页
@@ -288,10 +442,26 @@ function filterAlerts() {
     function changePage(page) {
         currentPage = page;
         filterAlerts();
+        // 滚动到顶部
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // 更改每页显示数量
+    function changePageSize() {
+        alertsPerPage = parseInt(document.getElementById('page-size').value);
+        currentPage = 1;
+        filterAlerts();
     }
 
     // 解决单个告警
     function resolveAlert(alertId) {
+        const button = document.getElementById(`resolve-btn-${alertId}`);
+        const originalText = button.innerHTML;
+
+        // 显示加载状态
+        button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 处理中...';
+        button.disabled = true;
+
         fetch(`/api/resolve-alert/${alertId}`, {
             method: 'POST',
             headers: {
@@ -305,25 +475,43 @@ function filterAlerts() {
                 loadAlerts(); // 重新加载数据
             } else {
                 showToast('操作失败', 'error');
+                button.innerHTML = originalText;
+                button.disabled = false;
             }
         })
         .catch(error => {
             console.error('解决告警失败:', error);
             showToast('操作失败', 'error');
+            button.innerHTML = originalText;
+            button.disabled = false;
         });
     }
 
     // 解决所有告警
     function resolveAllAlerts() {
-        if (!confirm('确定要标记所有告警为已解决吗？')) {
+        const unresolvedAlerts = allAlerts.filter(alert => !alert.resolved);
+
+        if (unresolvedAlerts.length === 0) {
+            showToast('没有未解决的告警', 'info');
             return;
         }
 
-        const unresolvedAlerts = allAlerts.filter(alert => !alert.resolved);
-        let resolvedCount = 0;
+        if (!confirm(`确定要标记 ${unresolvedAlerts.length} 个告警为已解决吗？`)) {
+            return;
+        }
 
-        // 逐个解决告警
-        unresolvedAlerts.forEach(alert => {
+        const button = document.getElementById('resolve-all-btn');
+        const originalText = button.innerHTML;
+
+        // 显示加载状态
+        button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 处理中...';
+        button.disabled = true;
+
+        let resolvedCount = 0;
+        let failedCount = 0;
+
+        // 使用Promise.all等待所有请求完成
+        const requests = unresolvedAlerts.map(alert =>
             fetch(`/api/resolve-alert/${alert.id}`, {
                 method: 'POST',
                 headers: {
@@ -334,48 +522,137 @@ function filterAlerts() {
             .then(data => {
                 if (data.success) {
                     resolvedCount++;
+                } else {
+                    failedCount++;
                 }
             })
-            .finally(() => {
-                // 最后一个请求完成后刷新
-                if (resolvedCount === unresolvedAlerts.length) {
-                    showToast(`已解决 ${resolvedCount} 个告警`, 'success');
-                    loadAlerts();
-                }
-            });
-        });
+            .catch(error => {
+                console.error('解决告警失败:', error);
+                failedCount++;
+            })
+        );
 
-        if (unresolvedAlerts.length === 0) {
-            showToast('没有未解决的告警', 'info');
-        }
+        Promise.all(requests)
+            .then(() => {
+                let message = `已成功解决 ${resolvedCount} 个告警`;
+                if (failedCount > 0) {
+                    message += `，${failedCount} 个告警处理失败`;
+                }
+
+                showToast(message, failedCount > 0 ? 'warning' : 'success');
+                loadAlerts();
+            })
+            .finally(() => {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            });
     }
 
     // 刷新告警
     function refreshAlerts() {
+        const button = document.getElementById('refresh-btn');
+        const originalText = button.innerHTML;
+
+        // 显示加载状态
+        button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 刷新中...';
+        button.disabled = true;
+
         loadAlerts();
-        showToast('告警数据已刷新', 'info');
+
+        // 恢复按钮状态
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }, 1000);
     }
 
     // 显示提示消息
     function showToast(message, type) {
-        // 简单的提示实现
-        alert(`[${type.toUpperCase()}] ${message}`);
+        const toastContainer = document.getElementById('toast-container');
+        const toastId = 'toast-' + Date.now();
+
+        const toastClass = type === 'success' ? 'bg-success' :
+                          type === 'error' ? 'bg-danger' :
+                          type === 'warning' ? 'bg-warning' : 'bg-info';
+
+        const toastHTML = `
+            <div id="${toastId}" class="toast align-items-center text-white ${toastClass} border-0" role="alert">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+        `;
+
+        toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+        toast.show();
+
+        // 移除DOM元素
+        toastElement.addEventListener('hidden.bs.toast', function() {
+            toastElement.remove();
+        });
     }
 
     // 获取告警样式类
     function getAlertClass(level) {
-    switch(level.toUpperCase()) {  // 添加 toUpperCase()
-        case 'ERROR': return 'danger';
-        case 'WARNING': return 'warning';
-        case 'INFO': return 'info';
-        default: return 'secondary';
+        switch(level.toUpperCase()) {
+            case 'ERROR': return 'danger';
+            case 'WARNING': return 'warning';
+            case 'INFO': return 'info';
+            default: return 'secondary';
+        }
     }
+
+    // 获取告警级别文本
+    function getAlertLevelText(level) {
+        switch(level.toUpperCase()) {
+            case 'ERROR': return '严重';
+            case 'WARNING': return '警告';
+            case 'INFO': return '信息';
+            default: return level;
+        }
+    }
+
+    // 格式化日期时间
+    function formatDateTime(timestamp) {
+        if (!timestamp) return '-';
+        const date = new Date(timestamp);
+        return date.toLocaleString('zh-CN');
+    }
+
+    // 格式化相对时间
+    function formatRelativeTime(timestamp) {
+        if (!timestamp) return '';
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffMins < 1) return '刚刚';
+        if (diffMins < 60) return `${diffMins} 分钟前`;
+        if (diffHours < 24) return `${diffHours} 小时前`;
+        if (diffDays < 7) return `${diffDays} 天前`;
+        return '';
+    }
+
+    // HTML转义
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     // 页面加载时初始化
     document.addEventListener('DOMContentLoaded', function() {
         loadAlerts();
-        
+
         // 每30秒自动刷新
         setInterval(loadAlerts, 30000);
     });

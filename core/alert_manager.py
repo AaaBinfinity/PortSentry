@@ -86,6 +86,8 @@ class AlertManager:
             return query.all()
 
         return self._db_operation_with_retry(_query_all_alerts)
+
+
     def _determine_alert_level(self, port_data, change_type):
         """根据端口和变化类型确定告警级别"""
         port = port_data.get('port', 0)

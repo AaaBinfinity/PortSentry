@@ -71,7 +71,7 @@ def create_app():
         return decorator
 
     def background_scanner():
-        """后台扫描线程"""
+        """后台扫描线程 - 添加调试日志"""
         with app.app_context():
             scan_count = 0
             total_duration = 0
@@ -85,6 +85,13 @@ def create_app():
                     scan_result = scanner.scan_ports()
                     app_state['last_scan'] = scan_result
 
+                    # 添加调试日志
+                    current_ports = scan_result.get('current_ports', [])
+                    changes = scan_result.get('changes', {})
+                    logger.info(f"扫描完成: 发现 {len(current_ports)} 个端口, "
+                                f"新增: {len(changes.get('new_ports', []))}, "
+                                f"关闭: {len(changes.get('closed_ports', []))}")
+
                     # 更新扫描统计
                     scan_duration = time.time() - start_time
                     scan_count += 1
@@ -97,46 +104,58 @@ def create_app():
                         'last_scan_duration': scan_duration
                     })
 
-                    # 检查变化并生成告警 - 确保告警保存到数据库
-                    if scan_result.get('changes'):
+                    # 检查变化并生成告警
+                    if changes.get('new_ports') or changes.get('closed_ports'):
+                        logger.info(f"检测到端口变化，开始生成告警...")
                         try:
-                            alerts = alert_manager.check_port_changes(scan_result['changes'])
+                            alerts = alert_manager.check_port_changes(changes)
                             if alerts:
-                                # 告警会自动保存到数据库，这里只需要记录日志
-                                logger.info(f"Generated {len(alerts)} new alerts")
-
-                                # 更新内存中的告警列表用于实时显示
-                                db_alerts = alert_manager.get_all_alerts(limit=100)
-                                app_state['alerts'] = [{
-                                    'id': alert.id,
-                                    'title': alert.title,
-                                    'message': alert.message,
-                                    'level': alert.level,
-                                    'timestamp': alert.timestamp.isoformat() if alert.timestamp else None,
-                                    'resolved': alert.resolved,
-                                    'port': alert.port
-                                } for alert in db_alerts]
-
+                                logger.info(f"成功生成 {len(alerts)} 个告警")
+                                # 打印告警详情
+                                for alert in alerts:
+                                    logger.info(f"告警: {alert.level} - {alert.message}")
+                            else:
+                                logger.warning("端口变化检测到，但未生成任何告警")
                         except Exception as alert_error:
                             logger.error(f"处理告警时出错: {alert_error}")
+                            import traceback
+                            logger.error(traceback.format_exc())
+                    else:
+                        logger.info("未检测到端口变化")
 
                     app_state['is_scanning'] = False
 
                     # 自适应扫描间隔
                     interval = config.SCAN_INTERVAL_IDLE
-                    if scan_result.get('changes'):
+                    if changes:
                         interval = config.SCAN_INTERVAL_BUSY
 
                     # 清理缓存
                     cache.clear()
 
-                    logger.info(f"Scan completed in {scan_duration:.2f}s, next scan in {interval}s")
+                    logger.info(f"扫描完成，耗时 {scan_duration:.2f}s，下次扫描在 {interval}s 后")
                     time.sleep(interval)
 
                 except Exception as e:
                     logger.error(f"Scanner error: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
                     app_state['is_scanning'] = False
                     time.sleep(10)
+
+    # === 在 create_app() 内部启动后台线程 ===
+    def start_background_scanner():
+        """启动后台扫描线程"""
+        try:
+            scanner_thread = threading.Thread(target=background_scanner, daemon=True)
+            scanner_thread.start()
+            logger.info("后台扫描线程已启动")
+        except Exception as e:
+            logger.error(f"启动后台扫描线程失败: {e}")
+
+    # 立即启动后台线程
+    start_background_scanner()
+
     # 路由定义
     @app.route('/')
     def dashboard():
@@ -202,6 +221,7 @@ def create_app():
         except Exception as e:
             logger.error(f"Error getting alerts: {e}")
             return jsonify({'error': 'Internal server error'}), 500
+
     @app.route('/api/system-info')
     @cache_view(CACHE_TIMEOUT)
     def system_info():
@@ -342,84 +362,6 @@ def create_app():
             logger.error(f"Error getting stats: {e}")
             return jsonify({'error': 'Internal server error'}), 500
 
-    # 修复后台扫描线程中的告警检查
-    def background_scanner():
-        """后台扫描线程"""
-        with app.app_context():
-            scan_count = 0
-            total_duration = 0
-
-            # 初始化数据库管理器
-            from core.database import configure_database
-            db_manager = configure_database(app)
-
-            while True:
-                try:
-                    start_time = time.time()
-                    app_state['is_scanning'] = True
-
-                    # 执行扫描
-                    scan_result = scanner.scan_ports()
-                    app_state['last_scan'] = scan_result
-
-                    # 更新扫描统计
-                    scan_duration = time.time() - start_time
-                    scan_count += 1
-                    total_duration += scan_duration
-
-                    app_state['scan_stats'].update({
-                        'total_scans': scan_count,
-                        'last_scan_time': datetime.now(),
-                        'avg_scan_duration': total_duration / scan_count,
-                        'last_scan_duration': scan_duration
-                    })
-
-                    # 检查变化并生成告警 - 使用带重试的数据库操作
-                    if scan_result.get('changes'):
-                        try:
-                            alerts = db_manager.execute_with_retry(
-                                alert_manager.check_port_changes,
-                                scan_result['changes']
-                            )
-                            if alerts:
-                                # 转换为字典格式存储
-                                alert_dicts = [{
-                                    'id': alert.id,
-                                    'title': alert.title,
-                                    'message': alert.message,
-                                    'level': alert.level,
-                                    'timestamp': alert.timestamp.isoformat() if alert.timestamp else None,
-                                    'resolved': alert.resolved
-                                } for alert in alerts]
-
-                                app_state['alerts'].extend(alert_dicts)
-                                # 只保留最近100条告警
-                                app_state['alerts'] = app_state['alerts'][-100:]
-
-                                logger.info(f"Generated {len(alerts)} new alerts")
-                        except Exception as alert_error:
-                            logger.error(f"处理告警时出错: {alert_error}")
-                            # 继续执行，不中断扫描
-
-                    app_state['is_scanning'] = False
-
-                    # 自适应扫描间隔
-                    interval = config.SCAN_INTERVAL_IDLE
-                    if scan_result.get('changes'):
-                        interval = config.SCAN_INTERVAL_BUSY
-
-                    # 清理缓存
-                    cache.clear()
-
-                    logger.info(f"Scan completed in {scan_duration:.2f}s, next scan in {interval}s")
-                    time.sleep(interval)
-
-                except Exception as e:
-                    logger.error(f"Scanner error: {e}")
-                    app_state['is_scanning'] = False
-                    # 发生错误时等待更长时间
-                    time.sleep(10)
-
     @app.route('/alerts')
     def alerts_page():
         return render_template('alerts.html')
@@ -452,7 +394,6 @@ def create_app():
     return app
 
 
-# 在 app.py 中修改数据库初始化部分
 if __name__ == '__main__':
     app = create_app()
 
@@ -479,14 +420,12 @@ if __name__ == '__main__':
 
             # 检查 Alert 表是否存在
             from sqlalchemy import inspect
-
             inspector = inspect(db.engine)
             table_names = inspector.get_table_names()
             print(f"数据库中的表: {table_names}")
 
             if 'alerts' in table_names:
                 from core.database import Alert
-
                 alert_count = Alert.query.count()
                 logger.info(f"Database initialized with {alert_count} existing alerts")
             else:
@@ -495,13 +434,11 @@ if __name__ == '__main__':
         except Exception as e:
             logger.error(f"Database initialization error: {e}")
             import traceback
-
             logger.error(traceback.format_exc())
 
     # 启动前的系统检查
     logger.info("Starting Port Monitoring System...")
     logger.info(f"Database: {app.config['SQLALCHEMY_DATABASE_URI']}")
-    logger.info(
-        f"Scan Interval: {app.config['SCAN_INTERVAL_IDLE']}s (idle) / {app.config['SCAN_INTERVAL_BUSY']}s (busy)")
+    logger.info(f"Scan Interval: {app.config['SCAN_INTERVAL_IDLE']}s (idle) / {app.config['SCAN_INTERVAL_BUSY']}s (busy)")
 
     app.run(debug=True, host='0.0.0.0', port=5739)
