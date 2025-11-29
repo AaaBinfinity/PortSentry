@@ -220,18 +220,24 @@
         }
     }
 
-    async function updateSystemLoad() {
-        try {
-            const response = await fetch('/api/system-load');
-            if (!response.ok) throw new Error('系统负载获取失败');
+async function updateSystemLoad() {
+    try {
+        const response = await fetch('/api/system-info');
+        if (!response.ok) throw new Error('系统负载获取失败');
 
-            const data = await response.json();
-            document.getElementById('system-load').textContent = data.load || '0';
-        } catch (error) {
-            console.error('更新系统负载失败:', error);
-            document.getElementById('system-load').textContent = '0';
-        }
+        const systemInfo = await response.json();
+
+        // 使用正确的数据路径
+        const cpuPercent = systemInfo.load?.['1min'] || 0;
+        const loadValue = systemInfo.system?.cpu_percent || cpuPercent;
+
+        document.getElementById('system-load').textContent = Math.round(loadValue) + '%';
+
+    } catch (error) {
+        console.error('更新系统负载失败:', error);
+        document.getElementById('system-load').textContent = '0%';
     }
+}
 
     // 更新端口计数器
     function updatePortCounters() {
