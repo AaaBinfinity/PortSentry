@@ -359,12 +359,12 @@
 
     // 获取告警样式类
     function getAlertClass(level) {
-        switch(level) {
-            case 'ERROR': return 'danger';
-            case 'WARNING': return 'warning';
-            case 'INFO': return 'info';
-            default: return 'secondary';
-        }
+    switch(level.toUpperCase()) {  // 添加 toUpperCase()
+        case 'ERROR': return 'danger';
+        case 'WARNING': return 'warning';
+        case 'INFO': return 'info';
+        default: return 'secondary';
+    }
     }
 
     // 页面加载时初始化

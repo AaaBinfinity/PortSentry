@@ -395,6 +395,7 @@ def create_app():
                     app_state['is_scanning'] = False
                     # 发生错误时等待更长时间
                     time.sleep(10)
+
     @app.route('/alerts')
     def alerts_page():
         return render_template('alerts.html')
